@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Dropdown from '$lib/components/Dropdown.svelte';
+
   let products = $state([
     {
       product_id: "P001",
@@ -496,20 +498,17 @@
         placeholder="ค้นหาด้วยชื่อ, บาร์โค้ด, หมวดหมู่ หรือผู้จัดจำหน่าย..."
         bind:value={searchQuery}
       />
-      <div class="filter-selector">
-        <label for="category-filter">หมวดหมู่:</label>
-        <select
-          id="category-filter"
-          class="input-field filter-select"
-          bind:value={selectedCategory}
-          onchange={() => setCategoryFilter()}
-        >
-          <option value="all">ทั้งหมด</option>
-          {#each categories as c}
-            <option value={c.category_id}>{c.name}</option>
-          {/each}
-        </select>
-      </div>
+      <Dropdown
+        id="category-filter"
+        label="หมวดหมู่:"
+        options={[
+          { value: 'all', label: 'ทั้งหมด' },
+          ...categories.map((c) => ({ value: c.category_id, label: c.name })),
+        ]}
+        bind:value={selectedCategory}
+        onchange={() => setCategoryFilter()}
+        minWidth="150px"
+      />
     </div>
 
     <div class="table-wrapper">
@@ -625,19 +624,17 @@
         </nav>
       {/if}
 
-      <div class="page-size-selector">
-        <label for="page-size">รายการต่อหน้า:</label>
-        <select
-          id="page-size"
-          class="input-field page-size-select"
-          bind:value={pageSize}
-          onchange={() => setPageSize(Number(pageSize))}
-        >
-          {#each pageSizeOptions as size}
-            <option value={size}>{size}</option>
-          {/each}
-        </select>
-      </div>
+      <Dropdown
+        id="page-size"
+        label="รายการต่อหน้า:"
+        options={pageSizeOptions.map((size) => ({
+          value: String(size),
+          label: String(size),
+        }))}
+        bind:value={pageSize}
+        onchange={() => setPageSize(Number(pageSize))}
+        minWidth="80px"
+      />
     </div>
   </div>
 </div>
@@ -672,38 +669,6 @@
     max-width: 400px;
     flex: 1;
     min-width: 200px;
-  }
-
-  .filter-selector {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    font-size: 14px;
-    color: var(--color-text-primary);
-    opacity: 0.8;
-  }
-
-  .filter-select {
-    width: auto;
-    min-width: 150px;
-    padding: 8px 12px;
-    cursor: pointer;
-  }
-
-  .page-size-selector {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    font-size: 14px;
-    color: var(--color-text-primary);
-    opacity: 0.8;
-  }
-
-  .page-size-select {
-    width: auto;
-    min-width: 80px;
-    padding: 8px 12px;
-    cursor: pointer;
   }
 
   /* Prevent table from overflowing the card */

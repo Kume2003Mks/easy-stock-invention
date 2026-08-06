@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Dropdown from '$lib/components/Dropdown.svelte';
+
   // Store settings state
   let storeName = $state('Easy Stock');
   let storeAddress = $state('');
@@ -82,12 +84,13 @@
     <div class="card">
       <h2 class="section-title">การตั้งค่าระบบ</h2>
       <div class="form-group">
-        <label for="currency">สกุลเงิน</label>
-        <select id="currency" class="input-field" bind:value={currency}>
-          {#each currencyOptions as c}
-            <option value={c}>{c}</option>
-          {/each}
-        </select>
+        <Dropdown
+          id="currency"
+          label="สกุลเงิน"
+          options={currencyOptions.map((c) => ({ value: c, label: c }))}
+          bind:value={currency}
+          minWidth="100%"
+        />
       </div>
       <div class="form-group">
         <label for="low-stock">ระดับสต็อกขั้นต่ำ (แจ้งเตือน)</label>
