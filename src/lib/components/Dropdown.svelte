@@ -30,9 +30,12 @@
   } = $props();
 
   let isOpen = $state(false);
+  let openUpward = $state(false);
+  let alignRight = $state(false);
   let highlightedIndex = $state(-1);
   let searchQuery = $state('');
   let containerRef = $state<HTMLDivElement | null>(null);
+  let menuContainerRef = $state<HTMLDivElement | null>(null);
   let searchInputRef = $state<HTMLInputElement | null>(null);
   let menuRef = $state<HTMLUListElement | null>(null);
 
@@ -74,6 +77,49 @@
     minWidth === '100%' || minWidth === '100vw'
   );
 
+  function checkFlipDirection() {
+    if (!containerRef) return;
+    const rect = containerRef.getBoundingClientRect();
+    
+    // Calculate required menu height (search bar + items + padding)
+    const searchHeight = showSearch ? 46 : 0;
+    const requiredHeight = Math.min(260, options.length * 38 + 16 + searchHeight);
+
+    // Space relative to viewport
+    const viewportSpaceBelow = window.innerHeight - rect.bottom;
+    const viewportSpaceAbove = rect.top;
+
+    // Space relative to nearest container (.card, .content-area)
+    const container =
+      containerRef.closest('.card') ||
+      containerRef.closest('.content-area') ||
+      containerRef.closest('.table-wrapper');
+    
+    let containerSpaceBelow = viewportSpaceBelow;
+    let containerSpaceAbove = viewportSpaceAbove;
+
+    if (container) {
+      const containerRect = container.getBoundingClientRect();
+      containerSpaceBelow = containerRect.bottom - rect.bottom;
+      containerSpaceAbove = rect.top - containerRect.top;
+    }
+
+    // Rule 1: If space above inside container or viewport is too small, NEVER flip upward
+    if (containerSpaceAbove < requiredHeight + 10 || viewportSpaceAbove < requiredHeight + 10) {
+      openUpward = false;
+    } else if (containerSpaceBelow >= requiredHeight + 16 && viewportSpaceBelow >= requiredHeight + 16) {
+      // Rule 2: If space below is ample, stay downward
+      openUpward = false;
+    } else {
+      // Rule 3: Space below is tight AND space above is ample -> flip upward
+      openUpward = containerSpaceAbove > containerSpaceBelow && containerSpaceAbove >= requiredHeight;
+    }
+
+    // Horizontal check: if near the right edge of viewport/card, align right edge
+    const spaceRight = window.innerWidth - rect.left;
+    alignRight = spaceRight < 240 && rect.right > 200;
+  }
+
   function toggleOpen() {
     if (disabled) return;
     if (isOpen) {
@@ -85,6 +131,7 @@
 
   function openMenu() {
     if (disabled) return;
+    checkFlipDirection();
     isOpen = true;
     searchQuery = '';
     
@@ -104,6 +151,8 @@
 
   function closeMenu(refocus = false) {
     isOpen = false;
+    openUpward = false;
+    alignRight = false;
     searchQuery = '';
     highlightedIndex = -1;
     if (refocus && containerRef) {
@@ -111,6 +160,13 @@
       triggerBtn?.focus();
     }
   }
+
+  // Verify and refine after menu DOM is mounted
+  $effect(() => {
+    if (isOpen && menuContainerRef) {
+      checkFlipDirection();
+    }
+  });
 
   function selectOption(opt: DropdownOption) {
     if (opt.disabled) return;
@@ -218,6 +274,7 @@
 <div
   bind:this={containerRef}
   class="dropdown-wrapper"
+  class:is-open={isOpen}
   class:full-width={isFullWidth}
   style={`--dropdown-min-width: ${minWidth}`}
 >
@@ -225,7 +282,7 @@
     <label for={instanceId} class="dropdown-label">{label}</label>
   {/if}
 
-  <div class="dropdown-box" class:full-width={isFullWidth}>
+  <div class="dropdown-box" class:is-open={isOpen} class:full-width={isFullWidth}>
     <!-- Hidden native input for forms -->
     {#if name}
       <input type="hidden" {name} {value} />
@@ -268,7 +325,13 @@
 
     <!-- Custom Popover Menu -->
     {#if isOpen}
-      <div class="dropdown-menu-container" class:full-width={isFullWidth}>
+      <div
+        bind:this={menuContainerRef}
+        class="dropdown-menu-container"
+        class:open-upward={openUpward}
+        class:align-right={alignRight}
+        class:full-width={isFullWidth}
+      >
         <!-- Search bar inside menu when options list is long -->
         {#if showSearch}
           <div class="dropdown-search-wrapper">
@@ -482,6 +545,11 @@
     transform: rotate(180deg);
   }
 
+  .dropdown-wrapper.is-open,
+  .dropdown-box.is-open {
+    z-index: 100;
+  }
+
   /* Popover Menu Panel */
   .dropdown-menu-container {
     position: absolute;
@@ -490,14 +558,25 @@
     min-width: 100%;
     width: max-content;
     max-width: 320px;
-    z-index: 100;
+    z-index: 1000;
     background-color: var(--color-surface);
     border: var(--border-subtle);
     border-radius: var(--radius-md);
-    box-shadow: 0 12px 32px rgba(46, 52, 64, 0.1),
+    box-shadow: 0 12px 32px rgba(46, 52, 64, 0.12),
                 0 4px 12px rgba(46, 52, 64, 0.05);
     padding: 6px;
     animation: dropdownSlideIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .dropdown-menu-container.align-right {
+    left: auto;
+    right: 0;
+  }
+
+  .dropdown-menu-container.open-upward {
+    top: auto;
+    bottom: calc(100% + 6px);
+    animation: dropdownSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   .dropdown-menu-container.full-width {
@@ -509,6 +588,17 @@
     from {
       opacity: 0;
       transform: translateY(-6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes dropdownSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
     }
     to {
       opacity: 1;

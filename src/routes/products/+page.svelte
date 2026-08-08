@@ -1,5 +1,6 @@
 <script lang="ts">
-  import Dropdown from '$lib/components/Dropdown.svelte';
+  import Dropdown from "$lib/components/Dropdown.svelte";
+  import ActionMenu from "$lib/components/ActionMenu.svelte";
 
   let products = $state([
     {
@@ -455,6 +456,10 @@
     currentPage = 1; // reset to first page when filter changes
   }
 
+  function deleteProduct(id: string) {
+    products = products.filter((p) => p.product_id !== id);
+  }
+
   // Generate pagination items with ellipsis for collapsed ranges
   function getPageItems(
     current: number,
@@ -486,7 +491,7 @@
 
 <header class="topbar">
   <h1>สินค้าคงคลัง</h1>
-    <button class="btn-primary">+ เพิ่มสินค้า</button>
+  <button class="btn-primary">+ เพิ่มสินค้า</button>
 </header>
 
 <div class="content-area">
@@ -502,7 +507,7 @@
         id="category-filter"
         label="หมวดหมู่:"
         options={[
-          { value: 'all', label: 'ทั้งหมด' },
+          { value: "all", label: "ทั้งหมด" },
           ...categories.map((c) => ({ value: c.category_id, label: c.name })),
         ]}
         bind:value={selectedCategory}
@@ -522,7 +527,7 @@
             <th>ต้นทุน</th>
             <th>ราคาขาย</th>
             <th>คงเหลือ</th>
-            <th>จัดการ</th>
+            <th class="col-actions">จัดการ</th>
           </tr>
         </thead>
         <tbody>
@@ -543,8 +548,34 @@
                   {p.current_stock}
                 </span>
               </td>
-              <td>
-                <button class="action-btn">แก้ไข</button>
+              <td class="col-actions">
+                <ActionMenu
+                  align="right"
+                  items={[
+                    {
+                      label: "แก้ไขข้อมูล",
+                      icon: "edit",
+                      onclick: () => console.log("Edit product", p.product_id),
+                    },
+                    {
+                      label: "ปรับปรุงสต็อก",
+                      icon: "adjust",
+                      onclick: () => console.log("Adjust stock", p.product_id),
+                    },
+                    {
+                      label: "ประวัติสินค้า",
+                      icon: "history",
+                      onclick: () =>
+                        console.log("Product history", p.product_id),
+                    },
+                    {
+                      label: "ลบสินค้า",
+                      icon: "delete",
+                      variant: "danger",
+                      onclick: () => deleteProduct(p.product_id),
+                    },
+                  ]}
+                />
               </td>
             </tr>
           {:else}
@@ -701,16 +732,6 @@
   .badge-warning {
     background-color: #fff3e0;
     color: #f57c00;
-  }
-
-  .action-btn {
-    color: var(--color-primary);
-    font-weight: 500;
-    font-size: 14px;
-  }
-
-  .action-btn:hover {
-    text-decoration: underline;
   }
 
   .empty-state {
