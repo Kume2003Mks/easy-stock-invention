@@ -25,6 +25,8 @@ pub fn run() {
             adapters::commands::save_settings,
             adapters::commands::get_products_data,
             adapters::commands::create_product,
+            adapters::commands::update_product,
+            adapters::commands::adjust_stock,
             adapters::commands::delete_product,
             adapters::commands::get_categories,
             adapters::commands::create_category,

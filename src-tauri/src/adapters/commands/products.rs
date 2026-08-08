@@ -48,6 +48,39 @@ pub fn create_product(
 }
 
 #[tauri::command]
+pub fn update_product(
+    state: State<'_, Mutex<Connection>>,
+    product: Product,
+) -> Result<Product, AppError> {
+    let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+    product_repo::update_product(&conn, &product)?;
+
+    Ok(product)
+}
+
+#[tauri::command]
+pub fn adjust_stock(
+    state: State<'_, Mutex<Connection>>,
+    product_id: String,
+    transaction_type: String,
+    quantity: i32,
+    reference_no: Option<String>,
+) -> Result<Product, AppError> {
+    let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let updated = product_repo::adjust_stock(
+        &conn,
+        &product_id,
+        &transaction_type,
+        quantity,
+        reference_no.as_deref(),
+    )?;
+
+    Ok(updated)
+}
+
+#[tauri::command]
 pub fn delete_product(
     state: State<'_, Mutex<Connection>>,
     product_id: String,

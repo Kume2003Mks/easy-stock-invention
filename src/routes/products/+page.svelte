@@ -6,6 +6,8 @@
   import Modal from "$lib/components/Modal.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Pagination from "$lib/components/Pagination.svelte";
+  import ErrorModal from "$lib/components/ErrorModal.svelte";
+  import { parseAppError } from "$lib/utils/errorHandler";
 
   interface Product {
     product_id: string;
@@ -43,6 +45,20 @@
 
   let loading = $state(true);
   let loadError = $state("");
+
+  // Error modal state
+  let showErrorModal = $state(false);
+  let errorModalTitle = $state("เกิดข้อผิดพลาด");
+  let errorModalMessage = $state("");
+  let errorModalDetails = $state("");
+
+  function showError(err: unknown, fallbackTitle = "เกิดข้อผิดพลาด") {
+    const formatted = parseAppError(err, fallbackTitle);
+    errorModalTitle = formatted.title;
+    errorModalMessage = formatted.message;
+    errorModalDetails = formatted.details ?? "";
+    showErrorModal = true;
+  }
 
   // Add product modal state
   let showAddModal = $state(false);
@@ -189,7 +205,207 @@
       closeAddModal();
     } catch (err) {
       console.error("Failed to create product:", err);
-      alert(`ไม่สามารถบันทึกสินค้าได้: ${err}`);
+      cancelSave();
+      showError(err, "ไม่สามารถบันทึกสินค้าได้");
+    }
+  }
+
+  // Edit product modal state
+  let showEditModal = $state(false);
+  let showEditConfirm = $state(false);
+  let editProduct = $state({
+    product_id: "",
+    barcode: "",
+    name: "",
+    category_id: "",
+    supplier_id: "",
+    cost_price: 0,
+    selling_price: 0,
+    wholesale_price: 0,
+    current_stock: 0,
+    reorder_level: 10,
+  });
+  let editFormErrors = $state<Record<string, string>>({});
+
+  function clearEditFieldError(field: string) {
+    if (editFormErrors[field]) {
+      const { [field]: _removed, ...rest } = editFormErrors;
+      editFormErrors = rest;
+    }
+  }
+
+  function validateEditForm(): boolean {
+    const errors: Record<string, string> = {};
+    if (!editProduct.name.trim()) {
+      errors.name = "กรุณากรอกชื่อสินค้า";
+    }
+    if (!editProduct.barcode.trim()) {
+      errors.barcode = "กรุณากรอกบาร์โค้ด";
+    }
+    if (!editProduct.category_id) {
+      errors.category_id = "กรุณาเลือกหมวดหมู่";
+    }
+    editFormErrors = errors;
+    return Object.keys(errors).length === 0;
+  }
+
+  function openEditModal(p: Product) {
+    editProduct = {
+      product_id: p.product_id,
+      barcode: p.barcode ?? "",
+      name: p.name,
+      category_id: p.category_id ?? "",
+      supplier_id: p.supplier_id ?? "",
+      cost_price: p.cost_price,
+      selling_price: p.selling_price,
+      wholesale_price: p.wholesale_price,
+      current_stock: p.current_stock,
+      reorder_level: p.reorder_level,
+    };
+    editFormErrors = {};
+    showEditModal = true;
+  }
+
+  function closeEditModal() {
+    showEditModal = false;
+    editFormErrors = {};
+  }
+
+  function saveEditProduct() {
+    if (!validateEditForm()) return;
+    showEditConfirm = true;
+  }
+
+  function cancelEditConfirm() {
+    showEditConfirm = false;
+  }
+
+  async function confirmSaveEditProduct() {
+    try {
+      const payload: Product = {
+        product_id: editProduct.product_id,
+        barcode: editProduct.barcode.trim() || null,
+        name: editProduct.name.trim(),
+        category_id: editProduct.category_id || null,
+        supplier_id: editProduct.supplier_id || null,
+        cost_price: Number(editProduct.cost_price) || 0,
+        selling_price: Number(editProduct.selling_price) || 0,
+        wholesale_price: Number(editProduct.wholesale_price) || 0,
+        current_stock: Number(editProduct.current_stock) || 0,
+        reorder_level: Number(editProduct.reorder_level) || 10,
+      };
+
+      const updated = (await invoke("update_product", {
+        product: payload,
+      })) as Product;
+
+      products = products.map((p) =>
+        p.product_id === updated.product_id ? updated : p,
+      );
+      cancelEditConfirm();
+      closeEditModal();
+    } catch (err) {
+      console.error("Failed to update product:", err);
+      cancelEditConfirm();
+      showError(err, "ไม่สามารถแก้ไขสินค้าได้");
+    }
+  }
+
+  // Adjust stock modal state
+  let showAdjustModal = $state(false);
+  let showAdjustConfirm = $state(false);
+  let adjustTargetProduct = $state<Product | null>(null);
+  let adjustType = $state<"IN" | "OUT" | "ADJUST">("IN");
+  let adjustQuantity = $state<number>(1);
+  let adjustReference = $state("");
+  let adjustError = $state("");
+
+  let calculatedNewStock = $derived.by(() => {
+    if (!adjustTargetProduct) return 0;
+    const current = adjustTargetProduct.current_stock;
+    const qty = Number(adjustQuantity) || 0;
+    if (adjustType === "IN") {
+      return current + qty;
+    } else if (adjustType === "OUT") {
+      return current - qty;
+    } else if (adjustType === "ADJUST") {
+      return qty;
+    }
+    return current;
+  });
+
+  function openAdjustModal(p: Product) {
+    adjustTargetProduct = p;
+    adjustType = "IN";
+    adjustQuantity = 1;
+    adjustReference = "";
+    adjustError = "";
+    showAdjustModal = true;
+  }
+
+  function closeAdjustModal() {
+    showAdjustModal = false;
+    adjustTargetProduct = null;
+    adjustError = "";
+  }
+
+  function validateAdjust(): boolean {
+    adjustError = "";
+    if (!adjustTargetProduct) return false;
+    const qty = Number(adjustQuantity);
+    if (isNaN(qty)) {
+      adjustError = "กรุณากรอกจำนวนตัวเลข";
+      return false;
+    }
+    if (adjustType === "IN" && qty <= 0) {
+      adjustError = "จำนวนรับเข้าต้องมากกว่า 0";
+      return false;
+    }
+    if (adjustType === "OUT") {
+      if (qty <= 0) {
+        adjustError = "จำนวนจ่ายออกต้องมากกว่า 0";
+        return false;
+      }
+      if (qty > adjustTargetProduct.current_stock) {
+        adjustError = `สต็อกมีเพียง ${adjustTargetProduct.current_stock} ชิ้น ไม่สามารถจ่ายออกเกินสต็อกที่มีได้`;
+        return false;
+      }
+    }
+    if (adjustType === "ADJUST" && qty < 0) {
+      adjustError = "จำนวนสต็อกต้องไม่ติดลบ";
+      return false;
+    }
+    return true;
+  }
+
+  function requestAdjustStock() {
+    if (!validateAdjust()) return;
+    showAdjustConfirm = true;
+  }
+
+  function cancelAdjustConfirm() {
+    showAdjustConfirm = false;
+  }
+
+  async function confirmAdjustStock() {
+    if (!adjustTargetProduct) return;
+    try {
+      const updated = (await invoke("adjust_stock", {
+        productId: adjustTargetProduct.product_id,
+        transactionType: adjustType,
+        quantity: Number(adjustQuantity),
+        referenceNo: adjustReference.trim() || null,
+      })) as Product;
+
+      products = products.map((p) =>
+        p.product_id === updated.product_id ? updated : p,
+      );
+      cancelAdjustConfirm();
+      closeAdjustModal();
+    } catch (err) {
+      console.error("Failed to adjust stock:", err);
+      cancelAdjustConfirm();
+      showError(err, "ไม่สามารถปรับปรุงสต็อกได้");
     }
   }
 
@@ -208,8 +424,12 @@
     const q = searchQuery.trim().toLowerCase();
     return products.filter((p) => {
       // Category filter
-      if (selectedCategory !== "all" && p.category_id !== selectedCategory) {
-        return false;
+      if (selectedCategory !== "all") {
+        if (selectedCategory === "none") {
+          if (p.category_id) return false;
+        } else if (p.category_id !== selectedCategory) {
+          return false;
+        }
       }
       // Search filter
       if (q) {
@@ -218,6 +438,10 @@
           (p.barcode && p.barcode.toLowerCase().includes(q)) ||
           (p.category_id &&
             getCategoryName(p.category_id).toLowerCase().includes(q)) ||
+          (!p.category_id &&
+            ("ไม่มีหมวดหมู่".includes(q) ||
+              "ไม่ระบุหมวดหมู่".includes(q) ||
+              "ไม่มี".includes(q))) ||
           (p.supplier_id &&
             getSupplierName(p.supplier_id).toLowerCase().includes(q))
         );
@@ -310,7 +534,7 @@
         products = products.filter((p) => p.product_id !== deleteTargetId);
       } catch (err) {
         console.error("Failed to delete product:", err);
-        alert(`ไม่สามารถลบสินค้าได้: ${err}`);
+        showError(err, "ไม่สามารถลบสินค้าได้");
       }
     }
     cancelDeleteProduct();
@@ -333,12 +557,14 @@
         class="input-field search-input"
         placeholder="ค้นหาด้วยชื่อ, บาร์โค้ด, หมวดหมู่ หรือผู้จัดจำหน่าย..."
         bind:value={searchQuery}
+        oninput={() => (currentPage = 1)}
       />
       <Dropdown
         id="category-filter"
         label="หมวดหมู่:"
         options={[
           { value: "all", label: "ทั้งหมด" },
+          { value: "none", label: "ไม่มีหมวดหมู่" },
           ...categories.map((c) => ({ value: c.category_id, label: c.name })),
         ]}
         bind:value={selectedCategory}
@@ -405,14 +631,12 @@
                       {
                         label: "แก้ไขข้อมูล",
                         icon: "edit",
-                        onclick: () =>
-                          console.log("Edit product", p.product_id),
+                        onclick: () => openEditModal(p),
                       },
                       {
                         label: "ปรับปรุงสต็อก",
                         icon: "adjust",
-                        onclick: () =>
-                          console.log("Adjust stock", p.product_id),
+                        onclick: () => openAdjustModal(p),
                       },
                       {
                         label: "ลบสินค้า",
@@ -624,10 +848,13 @@
         <label for="export-category" class="form-label">หมวดหมู่</label>
         <Dropdown
           id="export-category"
-          options={categories.map((c) => ({
-            value: c.category_id,
-            label: c.name,
-          }))}
+          options={[
+            { value: "none", label: "ไม่มีหมวดหมู่" },
+            ...categories.map((c) => ({
+              value: c.category_id,
+              label: c.name,
+            })),
+          ]}
           bind:value={exportCategory}
           placeholder="เลือกหมวดหมู่"
           minWidth="100%"
@@ -698,6 +925,404 @@
   variant="danger"
   onConfirm={confirmDeleteProduct}
   onCancel={cancelDeleteProduct}
+/>
+
+<Modal
+  open={showEditModal}
+  title="แก้ไขข้อมูลสินค้า"
+  onClose={closeEditModal}
+  maxWidth="640px"
+>
+  <form
+    class="product-form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      saveEditProduct();
+    }}
+  >
+    <div class="form-grid">
+      <div class="form-group" class:has-error={!!editFormErrors.barcode}>
+        <label for="edit-product-barcode" class="form-label">บาร์โค้ด *</label>
+        <input
+          id="edit-product-barcode"
+          type="text"
+          class="input-field"
+          class:input-error={!!editFormErrors.barcode}
+          placeholder="เช่น 8850123456789"
+          bind:value={editProduct.barcode}
+          oninput={() => clearEditFieldError("barcode")}
+        />
+        {#if editFormErrors.barcode}
+          <span class="error-text">{editFormErrors.barcode}</span>
+        {/if}
+      </div>
+
+      <div class="form-group" class:has-error={!!editFormErrors.name}>
+        <label for="edit-product-name" class="form-label">ชื่อสินค้า *</label>
+        <input
+          id="edit-product-name"
+          type="text"
+          class="input-field"
+          class:input-error={!!editFormErrors.name}
+          placeholder="เช่น Premium Coffee Beans 500g"
+          bind:value={editProduct.name}
+          oninput={() => clearEditFieldError("name")}
+        />
+        {#if editFormErrors.name}
+          <span class="error-text">{editFormErrors.name}</span>
+        {/if}
+      </div>
+
+      <div class="form-group" class:has-error={!!editFormErrors.category_id}>
+        <label for="edit-product-category" class="form-label">หมวดหมู่ *</label>
+        <Dropdown
+          id="edit-product-category"
+          options={categories.map((c) => ({
+            value: c.category_id,
+            label: c.name,
+          }))}
+          bind:value={editProduct.category_id}
+          onchange={() => clearEditFieldError("category_id")}
+          placeholder="เลือกหมวดหมู่"
+          minWidth="100%"
+          hasError={!!editFormErrors.category_id}
+        />
+        {#if editFormErrors.category_id}
+          <span class="error-text">{editFormErrors.category_id}</span>
+        {/if}
+      </div>
+
+      <div class="form-group">
+        <label for="edit-product-supplier" class="form-label"
+          >ผู้จัดจำหน่าย</label
+        >
+        <Dropdown
+          id="edit-product-supplier"
+          options={suppliers.map((s) => ({
+            value: s.supplier_id,
+            label: s.name,
+          }))}
+          bind:value={editProduct.supplier_id}
+          placeholder="เลือกผู้จัดจำหน่าย"
+          clearable={true}
+          minWidth="100%"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-product-cost" class="form-label">ต้นทุน (บาท)</label>
+        <input
+          id="edit-product-cost"
+          type="number"
+          min="0"
+          step="0.01"
+          class="input-field"
+          placeholder="0.00"
+          bind:value={editProduct.cost_price}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-product-selling" class="form-label"
+          >ราคาขาย (บาท)</label
+        >
+        <input
+          id="edit-product-selling"
+          type="number"
+          min="0"
+          step="0.01"
+          class="input-field"
+          placeholder="0.00"
+          bind:value={editProduct.selling_price}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-product-wholesale" class="form-label"
+          >ราคาส่ง (บาท)</label
+        >
+        <input
+          id="edit-product-wholesale"
+          type="number"
+          min="0"
+          step="0.01"
+          class="input-field"
+          placeholder="0.00"
+          bind:value={editProduct.wholesale_price}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-product-reorder" class="form-label"
+          >ระดับสต็อกขั้นต่ำ</label
+        >
+        <input
+          id="edit-product-reorder"
+          type="number"
+          min="0"
+          step="1"
+          class="input-field"
+          placeholder="10"
+          bind:value={editProduct.reorder_level}
+        />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn-outline" onclick={closeEditModal}>
+        ยกเลิก
+      </button>
+      <button type="submit" class="btn-primary">บันทึกการแก้ไข</button>
+    </div>
+  </form>
+</Modal>
+
+<ConfirmModal
+  open={showEditConfirm}
+  title="ยืนยันการแก้ไขข้อมูลสินค้า"
+  message={`ต้องการบันทึกการแก้ไขสินค้า "${editProduct.name}" ใช่หรือไม่?`}
+  confirmText="บันทึก"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmSaveEditProduct}
+  onCancel={cancelEditConfirm}
+/>
+
+<Modal
+  open={showAdjustModal}
+  title="ปรับปรุงสต็อกสินค้า"
+  onClose={closeAdjustModal}
+  maxWidth="540px"
+>
+  {#if adjustTargetProduct}
+    <div class="adjust-container">
+      <div class="product-summary-card">
+        <div class="summary-details">
+          <span class="summary-name">{adjustTargetProduct.name}</span>
+          <span class="summary-meta">
+            บาร์โค้ด: {adjustTargetProduct.barcode || "-"} | หมวดหมู่: {getCategoryName(
+              adjustTargetProduct.category_id,
+            )}
+          </span>
+        </div>
+        <div class="summary-stock">
+          <span class="stock-label">สต็อกปัจจุบัน</span>
+          <span
+            class="badge {adjustTargetProduct.current_stock >
+            adjustTargetProduct.reorder_level
+              ? 'badge-success'
+              : 'badge-warning'}"
+          >
+            {adjustTargetProduct.current_stock} ชิ้น
+          </span>
+        </div>
+      </div>
+
+      <div class="adjust-form">
+        <div class="form-group">
+          <span class="form-label">ประเภทการปรับปรุง</span>
+          <div class="type-selector">
+            <button
+              type="button"
+              class="type-pill {adjustType === 'IN'
+                ? 'type-pill-active in'
+                : ''}"
+              onclick={() => {
+                adjustType = "IN";
+                adjustError = "";
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 5v14M5 12l7-7 7 7" />
+              </svg>
+              <span>รับเข้า (+)</span>
+            </button>
+
+            <button
+              type="button"
+              class="type-pill {adjustType === 'OUT'
+                ? 'type-pill-active out'
+                : ''}"
+              onclick={() => {
+                adjustType = "OUT";
+                adjustError = "";
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 19V5M5 12l7 7 7-7" />
+              </svg>
+              <span>จ่ายออก (-)</span>
+            </button>
+
+            <button
+              type="button"
+              class="type-pill {adjustType === 'ADJUST'
+                ? 'type-pill-active adjust'
+                : ''}"
+              onclick={() => {
+                adjustType = "ADJUST";
+                adjustQuantity = adjustTargetProduct?.current_stock ?? 0;
+                adjustError = "";
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M4 12h16" />
+              </svg>
+              <span>ปรับยอด (=)</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" class:has-error={!!adjustError}>
+          <label for="adjust-qty" class="form-label">
+            {adjustType === "ADJUST"
+              ? "จำนวนสต็อกจริงที่นับได้"
+              : "จำนวนที่ต้องการปรับปรุง"} *
+          </label>
+          <div class="qty-input-wrapper">
+            <button
+              type="button"
+              class="qty-btn"
+              onclick={() => {
+                const min = adjustType === "ADJUST" ? 0 : 1;
+                adjustQuantity = Math.max(min, Number(adjustQuantity) - 1);
+                adjustError = "";
+              }}
+            >
+              -
+            </button>
+            <input
+              id="adjust-qty"
+              type="number"
+              min={adjustType === "ADJUST" ? "0" : "1"}
+              step="1"
+              class="input-field qty-input"
+              class:input-error={!!adjustError}
+              bind:value={adjustQuantity}
+              oninput={() => (adjustError = "")}
+            />
+            <button
+              type="button"
+              class="qty-btn"
+              onclick={() => {
+                adjustQuantity = Number(adjustQuantity) + 1;
+                adjustError = "";
+              }}
+            >
+              +
+            </button>
+          </div>
+          {#if adjustError}
+            <span class="error-text">{adjustError}</span>
+          {/if}
+        </div>
+
+        <div class="preview-box">
+          <div class="preview-item">
+            <span class="preview-label">สต็อกเดิม:</span>
+            <span class="preview-val"
+              >{adjustTargetProduct.current_stock} ชิ้น</span
+            >
+          </div>
+          <div class="preview-arrow">➔</div>
+          <div class="preview-item">
+            <span class="preview-label">สต็อกหลังปรับปรุง:</span>
+            <span
+              class="preview-val-new"
+              class:val-negative={calculatedNewStock < 0}
+            >
+              {calculatedNewStock} ชิ้น
+            </span>
+          </div>
+          <div class="preview-diff">
+            ({adjustType === "IN"
+              ? `+${adjustQuantity}`
+              : adjustType === "OUT"
+                ? `-${adjustQuantity}`
+                : `${calculatedNewStock - adjustTargetProduct.current_stock >= 0 ? "+" : ""}${calculatedNewStock - adjustTargetProduct.current_stock}`})
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="adjust-ref" class="form-label"
+            >หมายเหตุ / เอกสารอ้างอิง</label
+          >
+          <input
+            id="adjust-ref"
+            type="text"
+            class="input-field"
+            placeholder="เช่น ตรวจนับสต็อกประจำรอบ, สินค้าชำรุด, PO-2026-08-01"
+            bind:value={adjustReference}
+          />
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-outline" onclick={closeAdjustModal}>
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            class="btn-primary"
+            onclick={requestAdjustStock}
+          >
+            บันทึกการปรับปรุง
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+</Modal>
+
+<ConfirmModal
+  open={showAdjustConfirm}
+  title="ยืนยันการปรับปรุงสต็อกสินค้า"
+  message={`ต้องการปรับปรุงสต็อกสินค้า "${adjustTargetProduct?.name}" ${
+    adjustType === "IN"
+      ? `เพิ่มขึ้น ${adjustQuantity} ชิ้น (จาก ${adjustTargetProduct?.current_stock} เป็น ${calculatedNewStock} ชิ้น)`
+      : adjustType === "OUT"
+        ? `ลดลง ${adjustQuantity} ชิ้น (จาก ${adjustTargetProduct?.current_stock} เป็น ${calculatedNewStock} ชิ้น)`
+        : `เป็น ${calculatedNewStock} ชิ้น (จากเดิม ${adjustTargetProduct?.current_stock} ชิ้น)`
+  } ใช่หรือไม่?`}
+  confirmText="ยืนยันการปรับปรุง"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmAdjustStock}
+  onCancel={cancelAdjustConfirm}
+/>
+
+<ErrorModal
+  open={showErrorModal}
+  title={errorModalTitle}
+  message={errorModalMessage}
+  details={errorModalDetails}
+  onClose={() => (showErrorModal = false)}
 />
 
 <style>
@@ -892,5 +1517,200 @@
   .btn-sm {
     padding: 4px 12px;
     font-size: 13px;
+  }
+
+  /* Adjust stock modal styles */
+  .adjust-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+
+  .product-summary-card {
+    background-color: var(--color-background);
+    border: var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+  }
+
+  .summary-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .summary-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .summary-meta {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    opacity: 0.65;
+  }
+
+  .summary-stock {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+
+  .stock-label {
+    font-size: 12px;
+    color: var(--color-text-primary);
+    opacity: 0.6;
+  }
+
+  .adjust-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+
+  .type-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .type-pill {
+    padding: 10px 8px;
+    border: var(--border-subtle);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .type-pill:hover {
+    background-color: var(--color-background);
+  }
+
+  .type-pill-active.in {
+    background-color: #e8f2e2;
+    border-color: #a3be8c;
+    color: #2e7d32;
+    font-weight: 600;
+  }
+
+  .type-pill-active.out {
+    background-color: #ffebee;
+    border-color: #ef9a9a;
+    color: #c62828;
+    font-weight: 600;
+  }
+
+  .type-pill-active.adjust {
+    background-color: #ebf1f7;
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .qty-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .qty-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    border: var(--border-subtle);
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .qty-btn:hover {
+    background-color: var(--color-background);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .qty-input {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .preview-box {
+    background-color: var(--color-background);
+    border: 1px dashed var(--color-muted);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .preview-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .preview-label {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    opacity: 0.7;
+  }
+
+  .preview-val {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  .preview-arrow {
+    color: var(--color-primary);
+    font-size: 14px;
+  }
+
+  .preview-val-new {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  .preview-val-new.val-negative {
+    color: var(--color-danger);
+  }
+
+  .preview-diff {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    opacity: 0.65;
+    font-weight: 500;
+  }
+
+  @media (max-width: 480px) {
+    .type-selector {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

@@ -5,6 +5,8 @@
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import Pagination from '$lib/components/Pagination.svelte';
+  import ErrorModal from '$lib/components/ErrorModal.svelte';
+  import { parseAppError } from '$lib/utils/errorHandler';
 
   interface Category {
     category_id: string;
@@ -14,6 +16,20 @@
   let categories = $state<Category[]>([]);
   let loading = $state(true);
   let loadError = $state('');
+
+  // Error modal state
+  let showErrorModal = $state(false);
+  let errorModalTitle = $state('เกิดข้อผิดพลาด');
+  let errorModalMessage = $state('');
+  let errorModalDetails = $state('');
+
+  function showError(err: unknown, fallbackTitle = 'เกิดข้อผิดพลาด') {
+    const formatted = parseAppError(err, fallbackTitle);
+    errorModalTitle = formatted.title;
+    errorModalMessage = formatted.message;
+    errorModalDetails = formatted.details ?? '';
+    showErrorModal = true;
+  }
 
   // Search & Pagination state
   let searchQuery = $state('');
@@ -128,7 +144,8 @@
       closeAddModal();
     } catch (err) {
       console.error('Failed to create category:', err);
-      alert(`ไม่สามารถบันทึกหมวดหมู่ได้: ${err}`);
+      cancelSave();
+      showError(err, 'ไม่สามารถบันทึกหมวดหมู่ได้');
     }
   }
 
@@ -151,7 +168,7 @@
         categories = categories.filter((c) => c.category_id !== deleteTargetId);
       } catch (err) {
         console.error('Failed to delete category:', err);
-        alert(`ไม่สามารถลบหมวดหมู่ได้: ${err}`);
+        showError(err, 'ไม่สามารถลบหมวดหมู่ได้');
       }
     }
     cancelDelete();
@@ -302,6 +319,14 @@
   variant="danger"
   onConfirm={confirmDeleteCategory}
   onCancel={cancelDelete}
+/>
+
+<ErrorModal
+  open={showErrorModal}
+  title={errorModalTitle}
+  message={errorModalMessage}
+  details={errorModalDetails}
+  onClose={() => (showErrorModal = false)}
 />
 
 <style>

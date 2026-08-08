@@ -5,6 +5,8 @@
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import Pagination from '$lib/components/Pagination.svelte';
+  import ErrorModal from '$lib/components/ErrorModal.svelte';
+  import { parseAppError } from '$lib/utils/errorHandler';
 
   interface Supplier {
     supplier_id: string;
@@ -15,6 +17,20 @@
   let suppliers = $state<Supplier[]>([]);
   let loading = $state(true);
   let loadError = $state('');
+
+  // Error modal state
+  let showErrorModal = $state(false);
+  let errorModalTitle = $state('เกิดข้อผิดพลาด');
+  let errorModalMessage = $state('');
+  let errorModalDetails = $state('');
+
+  function showError(err: unknown, fallbackTitle = 'เกิดข้อผิดพลาด') {
+    const formatted = parseAppError(err, fallbackTitle);
+    errorModalTitle = formatted.title;
+    errorModalMessage = formatted.message;
+    errorModalDetails = formatted.details ?? '';
+    showErrorModal = true;
+  }
 
   // Search & Pagination state
   let searchQuery = $state('');
@@ -135,7 +151,8 @@
       closeAddModal();
     } catch (err) {
       console.error('Failed to create supplier:', err);
-      alert(`ไม่สามารถบันทึกผู้จัดจำหน่ายได้: ${err}`);
+      cancelSave();
+      showError(err, 'ไม่สามารถบันทึกผู้จัดจำหน่ายได้');
     }
   }
 
@@ -158,7 +175,7 @@
         suppliers = suppliers.filter((s) => s.supplier_id !== deleteTargetId);
       } catch (err) {
         console.error('Failed to delete supplier:', err);
-        alert(`ไม่สามารถลบผู้จัดจำหน่ายได้: ${err}`);
+        showError(err, 'ไม่สามารถลบผู้จัดจำหน่ายได้');
       }
     }
     cancelDelete();
@@ -326,6 +343,14 @@
   variant="danger"
   onConfirm={confirmDeleteSupplier}
   onCancel={cancelDelete}
+/>
+
+<ErrorModal
+  open={showErrorModal}
+  title={errorModalTitle}
+  message={errorModalMessage}
+  details={errorModalDetails}
+  onClose={() => (showErrorModal = false)}
 />
 
 <style>
