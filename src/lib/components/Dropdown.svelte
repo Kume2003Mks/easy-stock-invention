@@ -6,17 +6,18 @@
   }
 
   let {
-    id = '',
-    label = '',
+    id = "",
+    label = "",
     options = [],
-    value = $bindable(''),
+    value = $bindable(""),
     onchange = () => {},
-    minWidth = 'auto',
-    placeholder = '',
+    minWidth = "auto",
+    placeholder = "",
     disabled = false,
-    name = '',
+    name = "",
     searchable,
     hasError = false,
+    clearable = false,
   }: {
     id?: string;
     label?: string;
@@ -29,13 +30,14 @@
     name?: string;
     searchable?: boolean;
     hasError?: boolean;
+    clearable?: boolean;
   } = $props();
 
   let isOpen = $state(false);
   let openUpward = $state(false);
   let alignRight = $state(false);
   let highlightedIndex = $state(-1);
-  let searchQuery = $state('');
+  let searchQuery = $state("");
   let containerRef = $state<HTMLDivElement | null>(null);
   let menuContainerRef = $state<HTMLDivElement | null>(null);
   let searchInputRef = $state<HTMLInputElement | null>(null);
@@ -48,19 +50,19 @@
 
   // Find currently selected option
   const selectedOption = $derived(
-    options.find((opt) => String(opt.value) === String(value))
+    options.find((opt) => String(opt.value) === String(value)),
   );
 
   // Display text in the trigger button
   const displayText = $derived(
-    selectedOption ? selectedOption.label : placeholder || 'เลือกรายการ'
+    selectedOption ? selectedOption.label : placeholder || "เลือกรายการ",
   );
 
   const isPlaceholder = $derived(!selectedOption && !!placeholder);
 
   // Auto-enable search if options count > 7 unless explicitly disabled
   const showSearch = $derived(
-    searchable !== undefined ? searchable : options.length > 7
+    searchable !== undefined ? searchable : options.length > 7,
   );
 
   // Filtered options based on search query
@@ -70,22 +72,23 @@
     return options.filter(
       (opt) =>
         opt.label.toLowerCase().includes(q) ||
-        String(opt.value).toLowerCase().includes(q)
+        String(opt.value).toLowerCase().includes(q),
     );
   });
 
   // Check if width is full
-  const isFullWidth = $derived(
-    minWidth === '100%' || minWidth === '100vw'
-  );
+  const isFullWidth = $derived(minWidth === "100%" || minWidth === "100vw");
 
   function checkFlipDirection() {
     if (!containerRef) return;
     const rect = containerRef.getBoundingClientRect();
-    
+
     // Calculate required menu height (search bar + items + padding)
     const searchHeight = showSearch ? 46 : 0;
-    const requiredHeight = Math.min(260, options.length * 38 + 16 + searchHeight);
+    const requiredHeight = Math.min(
+      260,
+      options.length * 38 + 16 + searchHeight,
+    );
 
     // Space relative to viewport
     const viewportSpaceBelow = window.innerHeight - rect.bottom;
@@ -93,12 +96,12 @@
 
     // Space relative to nearest container (.table-wrapper, .modal-content, .card, .content-area)
     const container =
-      containerRef.closest('.table-wrapper') ||
-      containerRef.closest('.modal-content') ||
-      containerRef.closest('.modal-box') ||
-      containerRef.closest('.card') ||
-      containerRef.closest('.content-area');
-    
+      containerRef.closest(".table-wrapper") ||
+      containerRef.closest(".modal-content") ||
+      containerRef.closest(".modal-box") ||
+      containerRef.closest(".card") ||
+      containerRef.closest(".content-area");
+
     let containerSpaceBelow = viewportSpaceBelow;
     let containerSpaceAbove = viewportSpaceAbove;
 
@@ -109,14 +112,22 @@
     }
 
     // Rule 1: If space above inside container or viewport is too small, NEVER flip upward
-    if (containerSpaceAbove < requiredHeight + 10 || viewportSpaceAbove < requiredHeight + 10) {
+    if (
+      containerSpaceAbove < requiredHeight + 10 ||
+      viewportSpaceAbove < requiredHeight + 10
+    ) {
       openUpward = false;
-    } else if (containerSpaceBelow >= requiredHeight + 16 && viewportSpaceBelow >= requiredHeight + 16) {
+    } else if (
+      containerSpaceBelow >= requiredHeight + 16 &&
+      viewportSpaceBelow >= requiredHeight + 16
+    ) {
       // Rule 2: If space below is ample, stay downward
       openUpward = false;
     } else {
       // Rule 3: Space below is tight AND space above is ample -> flip upward
-      openUpward = containerSpaceAbove > containerSpaceBelow && containerSpaceAbove >= requiredHeight;
+      openUpward =
+        containerSpaceAbove > containerSpaceBelow &&
+        containerSpaceAbove >= requiredHeight;
     }
 
     // Horizontal check: if near the right edge of viewport/card, align right edge
@@ -127,20 +138,24 @@
   // Ensure parent wrapper (.pagination-bar, .table-actions, table cells) has elevated z-index when open
   $effect(() => {
     if (!containerRef) return;
-    const parentBar = containerRef.closest('.pagination-bar') as HTMLElement | null;
-    const parentActions = containerRef.closest('.table-actions') as HTMLElement | null;
-    const parentRow = containerRef.closest('tr') as HTMLElement | null;
-    const parentTd = containerRef.closest('td') as HTMLElement | null;
+    const parentBar = containerRef.closest(
+      ".pagination-bar",
+    ) as HTMLElement | null;
+    const parentActions = containerRef.closest(
+      ".table-actions",
+    ) as HTMLElement | null;
+    const parentRow = containerRef.closest("tr") as HTMLElement | null;
+    const parentTd = containerRef.closest("td") as HTMLElement | null;
     if (isOpen) {
-      if (parentBar) parentBar.style.zIndex = '30';
-      if (parentActions) parentActions.style.zIndex = '30';
-      if (parentRow) parentRow.style.zIndex = '30';
-      if (parentTd) parentTd.style.zIndex = '30';
+      if (parentBar) parentBar.style.zIndex = "30";
+      if (parentActions) parentActions.style.zIndex = "30";
+      if (parentRow) parentRow.style.zIndex = "30";
+      if (parentTd) parentTd.style.zIndex = "30";
     } else {
-      if (parentBar) parentBar.style.zIndex = '';
-      if (parentActions) parentActions.style.zIndex = '';
-      if (parentRow) parentRow.style.zIndex = '';
-      if (parentTd) parentTd.style.zIndex = '';
+      if (parentBar) parentBar.style.zIndex = "";
+      if (parentActions) parentActions.style.zIndex = "";
+      if (parentRow) parentRow.style.zIndex = "";
+      if (parentTd) parentTd.style.zIndex = "";
     }
   });
 
@@ -157,11 +172,11 @@
     if (disabled) return;
     checkFlipDirection();
     isOpen = true;
-    searchQuery = '';
-    
+    searchQuery = "";
+
     // Set initial highlighted index to the currently selected option
     const idx = filteredOptions.findIndex(
-      (opt) => String(opt.value) === String(value)
+      (opt) => String(opt.value) === String(value),
     );
     highlightedIndex = idx >= 0 ? idx : 0;
 
@@ -177,10 +192,11 @@
     isOpen = false;
     openUpward = false;
     alignRight = false;
-    searchQuery = '';
+    searchQuery = "";
     highlightedIndex = -1;
     if (refocus && containerRef) {
-      const triggerBtn = containerRef.querySelector<HTMLButtonElement>('.dropdown-trigger');
+      const triggerBtn =
+        containerRef.querySelector<HTMLButtonElement>(".dropdown-trigger");
       triggerBtn?.focus();
     }
   }
@@ -194,9 +210,23 @@
 
   function selectOption(opt: DropdownOption) {
     if (opt.disabled) return;
-    value = opt.value;
-    onchange(opt.value);
+    if (clearable && String(value) === String(opt.value)) {
+      value = "";
+      onchange("");
+    } else {
+      value = opt.value;
+      onchange(opt.value);
+    }
     closeMenu(true);
+  }
+
+  function clearSelection(e: MouseEvent) {
+    e.stopPropagation();
+    value = "";
+    onchange("");
+    if (isOpen) {
+      closeMenu(true);
+    }
   }
 
   // Handle outside click & Escape
@@ -210,28 +240,28 @@
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         closeMenu(true);
       }
     }
 
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   });
 
   // Auto-scroll highlighted item into view
   $effect(() => {
     if (isOpen && highlightedIndex >= 0 && menuRef) {
-      const items = menuRef.querySelectorAll<HTMLElement>('.dropdown-item');
+      const items = menuRef.querySelectorAll<HTMLElement>(".dropdown-item");
       const target = items[highlightedIndex];
       if (target) {
-        target.scrollIntoView({ block: 'nearest' });
+        target.scrollIntoView({ block: "nearest" });
       }
     }
   });
@@ -240,38 +270,38 @@
   function handleTriggerKeyDown(e: KeyboardEvent) {
     if (disabled) return;
 
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!isOpen) {
         openMenu();
       } else {
-        moveHighlight(e.key === 'ArrowDown' ? 1 : -1);
+        moveHighlight(e.key === "ArrowDown" ? 1 : -1);
       }
-    } else if (e.key === 'Enter' || e.key === ' ') {
+    } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (!isOpen) {
         openMenu();
       } else if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
         selectOption(filteredOptions[highlightedIndex]);
       }
-    } else if (e.key === 'Tab' && isOpen) {
+    } else if (e.key === "Tab" && isOpen) {
       closeMenu();
     }
   }
 
   function handleSearchKeyDown(e: KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       moveHighlight(1);
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       moveHighlight(-1);
-    } else if (e.key === 'Enter') {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       if (highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
         selectOption(filteredOptions[highlightedIndex]);
       }
-    } else if (e.key === 'Tab') {
+    } else if (e.key === "Tab") {
       closeMenu();
     }
   }
@@ -306,7 +336,11 @@
     <label for={instanceId} class="dropdown-label">{label}</label>
   {/if}
 
-  <div class="dropdown-box" class:is-open={isOpen} class:full-width={isFullWidth}>
+  <div
+    class="dropdown-box"
+    class:is-open={isOpen}
+    class:full-width={isFullWidth}
+  >
     <!-- Hidden native input for forms -->
     {#if name}
       <input type="hidden" {name} {value} />
@@ -329,7 +363,38 @@
       onkeydown={handleTriggerKeyDown}
     >
       <span class="dropdown-value-text">{displayText}</span>
-      
+
+      {#if clearable && selectedOption && !disabled}
+        <span
+          role="button"
+          class="dropdown-clear-btn"
+          onclick={clearSelection}
+          onkeydown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              clearSelection(e as any);
+            }
+          }}
+          aria-label="ล้างตัวเลือก"
+          title="ยกเลิกตัวเลือก"
+          tabindex="-1"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </span>
+      {/if}
+
       <!-- Chevron icon with smooth rotation -->
       <svg
         class="dropdown-chevron"
@@ -388,7 +453,7 @@
                 type="button"
                 class="dropdown-search-clear"
                 onclick={() => {
-                  searchQuery = '';
+                  searchQuery = "";
                   searchInputRef?.focus();
                 }}
                 aria-label="ล้างการค้นหา"
@@ -407,10 +472,25 @@
           role="listbox"
           tabindex="-1"
         >
-          {#if filteredOptions.length === 0}
-            <li class="dropdown-empty" role="presentation">
-              ไม่พบตัวเลือก
+          {#if clearable && selectedOption}
+            <li
+              role="option"
+              aria-selected={false}
+              class="dropdown-item dropdown-clear-item"
+              onclick={clearSelection}
+              onkeydown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  clearSelection(e as any);
+                }
+              }}
+            >
+              <span class="dropdown-item-label">✕ ยกเลิกตัวเลือก / ไม่ระบุ</span
+              >
             </li>
+          {/if}
+          {#if filteredOptions.length === 0}
+            <li class="dropdown-empty" role="presentation">ไม่พบตัวเลือก</li>
           {:else}
             {#each filteredOptions as opt, index (opt.value)}
               {@const isSelected = String(opt.value) === String(value)}
@@ -429,7 +509,7 @@
                 }}
                 onclick={() => selectOption(opt)}
                 onkeydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     selectOption(opt);
                   }
@@ -517,9 +597,10 @@
     outline: none;
     cursor: pointer;
     text-align: left;
-    transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dropdown-trigger:hover:not(:disabled) {
@@ -561,13 +642,39 @@
     line-height: 1.4;
   }
 
+  .dropdown-clear-btn {
+    background: transparent;
+    border: none;
+    padding: 2px 4px;
+    margin-right: -4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-primary);
+    opacity: 0.5;
+    cursor: pointer;
+    border-radius: 4px;
+    transition:
+      opacity 0.15s,
+      color 0.15s,
+      background-color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .dropdown-clear-btn:hover {
+    opacity: 1;
+    color: var(--color-danger);
+    background-color: rgba(191, 97, 106, 0.12);
+  }
+
   .dropdown-chevron {
     flex-shrink: 0;
     color: var(--color-text-primary);
     opacity: 0.6;
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-                color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dropdown-trigger:hover .dropdown-chevron,
@@ -597,8 +704,9 @@
     background-color: var(--color-surface);
     border: var(--border-subtle);
     border-radius: var(--radius-md);
-    box-shadow: 0 12px 32px rgba(46, 52, 64, 0.12),
-                0 4px 12px rgba(46, 52, 64, 0.05);
+    box-shadow:
+      0 12px 32px rgba(46, 52, 64, 0.12),
+      0 4px 12px rgba(46, 52, 64, 0.05);
     padding: 6px;
     animation: dropdownSlideIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
@@ -611,8 +719,9 @@
   .dropdown-menu-container.open-upward {
     top: auto;
     bottom: calc(100% + 6px);
-    box-shadow: 0 -12px 32px rgba(46, 52, 64, 0.12),
-                0 -4px 12px rgba(46, 52, 64, 0.05);
+    box-shadow:
+      0 -12px 32px rgba(46, 52, 64, 0.12),
+      0 -4px 12px rgba(46, 52, 64, 0.05);
     animation: dropdownSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
@@ -671,7 +780,9 @@
     color: var(--color-text-primary);
     background-color: var(--color-background);
     outline: none;
-    transition: border-color 0.15s, background-color 0.15s;
+    transition:
+      border-color 0.15s,
+      background-color 0.15s;
   }
 
   .dropdown-search-input:focus {
@@ -738,7 +849,9 @@
     font-size: 14px;
     color: var(--color-text-primary);
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
 
   .dropdown-item:last-child {
@@ -778,6 +891,19 @@
   .dropdown-item-check {
     flex-shrink: 0;
     color: var(--color-primary);
+  }
+
+  .dropdown-clear-item {
+    color: var(--color-danger) !important;
+    opacity: 0.85;
+    border-bottom: 1px dashed var(--color-muted);
+    margin-bottom: 6px !important;
+    font-size: 13px;
+  }
+
+  .dropdown-clear-item:hover {
+    background-color: rgba(191, 97, 106, 0.08) !important;
+    opacity: 1;
   }
 
   .dropdown-empty {

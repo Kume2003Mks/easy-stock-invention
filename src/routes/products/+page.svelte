@@ -643,6 +643,7 @@
           }))}
           bind:value={newProduct.supplier_id}
           placeholder="เลือกผู้จัดจำหน่าย"
+          clearable={true}
           minWidth="100%"
         />
       </div>
