@@ -8,6 +8,8 @@
     confirmText = 'ยืนยัน',
     cancelText = 'ยกเลิก',
     variant = 'danger',
+    closeOnOutsideClick = true,
+    outsideClick = true,
     onConfirm = () => {},
     onCancel = () => {},
   }: {
@@ -17,6 +19,8 @@
     confirmText?: string;
     cancelText?: string;
     variant?: 'danger' | 'primary' | 'default';
+    closeOnOutsideClick?: boolean;
+    outsideClick?: boolean;
     onConfirm?: () => void;
     onCancel?: () => void;
   } = $props();
@@ -26,7 +30,7 @@
   }
 </script>
 
-<Modal {open} {title} onClose={onCancel} maxWidth="420px">
+<Modal {open} {title} onClose={onCancel} maxWidth="420px" closeOnOutsideClick={closeOnOutsideClick || outsideClick}>
   <div class="confirm-content">
     <p class="confirm-message">{message}</p>
     <div class="confirm-actions">

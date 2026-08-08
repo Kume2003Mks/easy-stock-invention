@@ -7,6 +7,8 @@
     message = '',
     details = '',
     buttonText = 'เข้าใจแล้ว',
+    closeOnOutsideClick = true,
+    outsideClick = true,
     onClose = () => {},
   }: {
     open?: boolean;
@@ -14,6 +16,8 @@
     message?: string;
     details?: string;
     buttonText?: string;
+    closeOnOutsideClick?: boolean;
+    outsideClick?: boolean;
     onClose?: () => void;
   } = $props();
 
@@ -25,7 +29,7 @@
   }
 </script>
 
-<Modal {open} {title} onClose={handleClose} maxWidth="460px">
+<Modal {open} {title} onClose={handleClose} maxWidth="460px" closeOnOutsideClick={closeOnOutsideClick || outsideClick}>
   <div class="error-content">
     <div class="error-icon-wrapper">
       <div class="error-icon-circle">

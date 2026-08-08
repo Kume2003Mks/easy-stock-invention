@@ -6,16 +6,22 @@
     title = '',
     onClose = () => {},
     maxWidth = '560px',
+    closeOnOutsideClick = false,
+    outsideClick = false,
     children,
   }: {
     open?: boolean;
     title?: string;
     onClose?: () => void;
     maxWidth?: string;
+    closeOnOutsideClick?: boolean;
+    outsideClick?: boolean;
     children?: Snippet;
   } = $props();
 
   let modalRef = $state<HTMLDivElement | null>(null);
+
+  const allowOutsideClose = $derived(closeOnOutsideClick || outsideClick);
 
   // Handle Escape key to close
   $effect(() => {
@@ -59,7 +65,9 @@
     class="modal-overlay"
     role="presentation"
     onclick={(e) => {
-      if (e.target === e.currentTarget) onClose();
+      if (allowOutsideClose && e.target === e.currentTarget) {
+        onClose();
+      }
     }}
   >
     <div
