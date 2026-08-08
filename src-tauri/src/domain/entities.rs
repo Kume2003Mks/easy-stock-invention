@@ -37,3 +37,11 @@ pub struct StockTransaction {
     pub reference_no: Option<String>,
     pub transaction_date: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppSetting {
+    pub setting_key: String,
+    pub setting_value: String,
+    pub description: Option<String>,
+    pub updated_at: DateTime<Utc>,
+}

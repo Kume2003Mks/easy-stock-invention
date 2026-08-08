@@ -39,3 +39,11 @@ CREATE TABLE IF NOT EXISTS Stock_Transactions (
     transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES Products(product_id)
 );
+
+-- 5. ตารางเก็บการตั้งค่าของแอปพลิเคชัน
+CREATE TABLE App_Settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    description TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
