@@ -16,6 +16,7 @@
     disabled = false,
     name = '',
     searchable,
+    hasError = false,
   }: {
     id?: string;
     label?: string;
@@ -27,6 +28,7 @@
     disabled?: boolean;
     name?: string;
     searchable?: boolean;
+    hasError?: boolean;
   } = $props();
 
   let isOpen = $state(false);
@@ -296,6 +298,7 @@
       class:is-open={isOpen}
       class:is-placeholder={isPlaceholder}
       class:is-disabled={disabled}
+      class:has-error={hasError}
       aria-haspopup="listbox"
       aria-expanded={isOpen}
       aria-controls={listboxId}
@@ -516,6 +519,16 @@
     opacity: 0.5;
     cursor: not-allowed;
     background-color: var(--color-background);
+  }
+
+  .dropdown-trigger.has-error {
+    border-color: var(--color-danger);
+  }
+
+  .dropdown-trigger.has-error:focus-visible,
+  .dropdown-trigger.has-error.is-open {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px rgba(191, 97, 106, 0.15);
   }
 
   .dropdown-value-text {
@@ -750,4 +763,4 @@
     color: var(--color-text-primary);
     opacity: 0.55;
   }
-</style>
+</style>

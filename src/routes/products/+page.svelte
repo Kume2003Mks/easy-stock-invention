@@ -1,6 +1,8 @@
 <script lang="ts">
   import Dropdown from "$lib/components/Dropdown.svelte";
   import ActionMenu from "$lib/components/ActionMenu.svelte";
+  import Modal from "$lib/components/Modal.svelte";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
   let products = $state([
     {
@@ -384,6 +386,131 @@
     },
   ]);
 
+  // Add product modal state
+  let showAddModal = $state(false);
+
+  // Save confirmation state
+  let showSaveConfirm = $state(false);
+  let pendingProductName = $state('');
+  let pendingProductBarcode = $state('');
+  let pendingProductCategory = $state('');
+  let pendingProductSupplier = $state('');
+  let pendingProductCost = $state(0);
+  let pendingProductSelling = $state(0);
+  let pendingProductWholesale = $state(0);
+  let pendingProductStock = $state(0);
+  let pendingProductReorder = $state(10);
+
+  // New product form state
+  let newProduct = $state({
+    barcode: "",
+    name: "",
+    category_id: "",
+    supplier_id: "",
+    cost_price: 0,
+    selling_price: 0,
+    wholesale_price: 0,
+    current_stock: 0,
+    reorder_level: 10,
+  });
+
+  // Validation error state
+  let formErrors = $state<Record<string, string>>({});
+
+  function clearFieldError(field: string) {
+    if (formErrors[field]) {
+      const { [field]: _removed, ...rest } = formErrors;
+      formErrors = rest;
+    }
+  }
+
+  function validateForm(): boolean {
+    const errors: Record<string, string> = {};
+
+    if (!newProduct.name.trim()) {
+      errors.name = "กรุณากรอกชื่อสินค้า";
+    }
+    if (!newProduct.barcode.trim()) {
+      errors.barcode = "กรุณากรอกบาร์โค้ด";
+    }
+    if (!newProduct.category_id) {
+      errors.category_id = "กรุณาเลือกหมวดหมู่";
+    }
+
+    formErrors = errors;
+    return Object.keys(errors).length === 0;
+  }
+
+  function openAddModal() {
+    // Reset form
+    newProduct = {
+      barcode: "",
+      name: "",
+      category_id: "",
+      supplier_id: "",
+      cost_price: 0,
+      selling_price: 0,
+      wholesale_price: 0,
+      current_stock: 0,
+      reorder_level: 10,
+    };
+    formErrors = {};
+    showAddModal = true;
+  }
+
+  function closeAddModal() {
+    showAddModal = false;
+    formErrors = {};
+  }
+
+  function addProduct() {
+    // Validate required fields
+    if (!validateForm()) return;
+
+    // Store pending data for confirmation
+    pendingProductName = newProduct.name.trim();
+    pendingProductBarcode = newProduct.barcode.trim();
+    pendingProductCategory = getCategoryName(newProduct.category_id);
+    pendingProductSupplier = newProduct.supplier_id
+      ? getSupplierName(newProduct.supplier_id)
+      : '-';
+    pendingProductCost = Number(newProduct.cost_price) || 0;
+    pendingProductSelling = Number(newProduct.selling_price) || 0;
+    pendingProductWholesale = Number(newProduct.wholesale_price) || 0;
+    pendingProductStock = Number(newProduct.current_stock) || 0;
+    pendingProductReorder = Number(newProduct.reorder_level) || 10;
+
+    showSaveConfirm = true;
+  }
+
+  function cancelSave() {
+    showSaveConfirm = false;
+  }
+
+  function confirmSaveProduct() {
+    // Generate next product_id
+    const nextId = `P${String(products.length + 1).padStart(3, "0")}`;
+
+    products = [
+      ...products,
+      {
+        product_id: nextId,
+        barcode: newProduct.barcode.trim(),
+        name: newProduct.name.trim(),
+        category_id: newProduct.category_id,
+        supplier_id: newProduct.supplier_id,
+        cost_price: Number(newProduct.cost_price) || 0,
+        selling_price: Number(newProduct.selling_price) || 0,
+        wholesale_price: Number(newProduct.wholesale_price) || 0,
+        current_stock: Number(newProduct.current_stock) || 0,
+        reorder_level: Number(newProduct.reorder_level) || 10,
+      },
+    ];
+
+    cancelSave();
+    closeAddModal();
+  }
+
   // Pagination state
   let currentPage = $state(1); // 1-based
   let pageSize = $state(10); // default 10
@@ -456,8 +583,31 @@
     currentPage = 1; // reset to first page when filter changes
   }
 
-  function deleteProduct(id: string) {
-    products = products.filter((p) => p.product_id !== id);
+  // Delete confirmation state
+  let showDeleteConfirm = $state(false);
+  let deleteTargetId = $state<string | null>(null);
+  let deleteTargetName = $state('');
+
+  function requestDeleteProduct(p: {
+    product_id: string;
+    name: string;
+  }) {
+    deleteTargetId = p.product_id;
+    deleteTargetName = p.name;
+    showDeleteConfirm = true;
+  }
+
+  function cancelDeleteProduct() {
+    showDeleteConfirm = false;
+    deleteTargetId = null;
+    deleteTargetName = '';
+  }
+
+  function confirmDeleteProduct() {
+    if (deleteTargetId) {
+      products = products.filter((p) => p.product_id !== deleteTargetId);
+    }
+    cancelDeleteProduct();
   }
 
   // Generate pagination items with ellipsis for collapsed ranges
@@ -491,7 +641,7 @@
 
 <header class="topbar">
   <h1>สินค้าคงคลัง</h1>
-  <button class="btn-primary">+ เพิ่มสินค้า</button>
+  <button class="btn-primary" onclick={openAddModal}>+ เพิ่มสินค้า</button>
 </header>
 
 <div class="content-area">
@@ -574,7 +724,7 @@
                       label: "ลบสินค้า",
                       icon: "delete",
                       variant: "danger",
-                      onclick: () => deleteProduct(p.product_id),
+                      onclick: () => requestDeleteProduct(p),
                     },
                   ]}
                 />
@@ -672,7 +822,242 @@
   </div>
 </div>
 
+<Modal
+  open={showAddModal}
+  title="เพิ่มสินค้าใหม่"
+  onClose={closeAddModal}
+  maxWidth="640px"
+>
+  <form
+    class="product-form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      addProduct();
+    }}
+  >
+    <div class="form-grid">
+      <div class="form-group" class:has-error={!!formErrors.barcode}>
+        <label for="product-barcode" class="form-label">บาร์โค้ด *</label>
+        <input
+          id="product-barcode"
+          type="text"
+          class="input-field"
+          class:input-error={!!formErrors.barcode}
+          placeholder="เช่น 8850123456789"
+          bind:value={newProduct.barcode}
+          oninput={() => clearFieldError("barcode")}
+        />
+        {#if formErrors.barcode}
+          <span class="error-text">{formErrors.barcode}</span>
+        {/if}
+      </div>
+
+      <div class="form-group" class:has-error={!!formErrors.name}>
+        <label for="product-name" class="form-label">ชื่อสินค้า *</label>
+        <input
+          id="product-name"
+          type="text"
+          class="input-field"
+          class:input-error={!!formErrors.name}
+          placeholder="เช่น Premium Coffee Beans 500g"
+          bind:value={newProduct.name}
+          oninput={() => clearFieldError("name")}
+        />
+        {#if formErrors.name}
+          <span class="error-text">{formErrors.name}</span>
+        {/if}
+      </div>
+
+      <div class="form-group" class:has-error={!!formErrors.category_id}>
+        <label for="product-category" class="form-label">หมวดหมู่ *</label>
+        <Dropdown
+          id="product-category"
+          options={categories.map((c) => ({
+            value: c.category_id,
+            label: c.name,
+          }))}
+          bind:value={newProduct.category_id}
+          onchange={() => clearFieldError("category_id")}
+          placeholder="เลือกหมวดหมู่"
+          minWidth="100%"
+          hasError={!!formErrors.category_id}
+        />
+        {#if formErrors.category_id}
+          <span class="error-text">{formErrors.category_id}</span>
+        {/if}
+      </div>
+
+      <div class="form-group">
+        <label for="product-supplier" class="form-label">ผู้จัดจำหน่าย</label>
+        <Dropdown
+          id="product-supplier"
+          options={suppliers.map((s) => ({
+            value: s.supplier_id,
+            label: s.name,
+          }))}
+          bind:value={newProduct.supplier_id}
+          placeholder="เลือกผู้จัดจำหน่าย"
+          minWidth="100%"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="product-cost" class="form-label">ต้นทุน (บาท)</label>
+        <input
+          id="product-cost"
+          type="number"
+          min="0"
+          step="0.01"
+          class="input-field"
+          placeholder="0.00"
+          bind:value={newProduct.cost_price}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="product-selling" class="form-label">ราคาขาย (บาท)</label>
+        <input
+          id="product-selling"
+          type="number"
+          min="0"
+          step="0.01"
+          class="input-field"
+          placeholder="0.00"
+          bind:value={newProduct.selling_price}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="product-wholesale" class="form-label">ราคาส่ง (บาท)</label>
+        <input
+          id="product-wholesale"
+          type="number"
+          min="0"
+          step="0.01"
+          class="input-field"
+          placeholder="0.00"
+          bind:value={newProduct.wholesale_price}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="product-stock" class="form-label">สต็อกเริ่มต้น</label>
+        <input
+          id="product-stock"
+          type="number"
+          min="0"
+          step="1"
+          class="input-field"
+          placeholder="0"
+          bind:value={newProduct.current_stock}
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="product-reorder" class="form-label">ระดับสต็อกขั้นต่ำ</label>
+        <input
+          id="product-reorder"
+          type="number"
+          min="0"
+          step="1"
+          class="input-field"
+          placeholder="10"
+          bind:value={newProduct.reorder_level}
+        />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn-outline" onclick={closeAddModal}>
+        ยกเลิก
+      </button>
+      <button type="submit" class="btn-primary">บันทึกสินค้า</button>
+    </div>
+  </form>
+</Modal>
+
+<ConfirmModal
+  open={showSaveConfirm}
+  title="ยืนยันการบันทึกสินค้า"
+  message={`ต้องการบันทึกสินค้า "${pendingProductName}" ใช่หรือไม่?`}
+  confirmText="บันทึก"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmSaveProduct}
+  onCancel={cancelSave}
+/>
+
+<ConfirmModal
+  open={showDeleteConfirm}
+  title="ยืนยันการลบสินค้า"
+  message={`ต้องการลบสินค้า "${deleteTargetName}" ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้`}
+  confirmText="ลบ"
+  cancelText="ยกเลิก"
+  variant="danger"
+  onConfirm={confirmDeleteProduct}
+  onCancel={cancelDeleteProduct}
+/>
+
 <style>
+  .product-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-md);
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    opacity: 0.85;
+  }
+
+  .form-group.has-error .form-label {
+    color: var(--color-danger);
+    opacity: 1;
+  }
+
+  .input-error {
+    border-color: var(--color-danger) !important;
+  }
+
+  .input-error:focus {
+    box-shadow: 0 0 0 3px rgba(191, 97, 106, 0.15);
+    border-color: var(--color-danger);
+  }
+
+  .error-text {
+    font-size: 12px;
+    color: var(--color-danger);
+    font-weight: 500;
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: var(--border-subtle);
+  }
+
+  @media (max-width: 480px) {
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .topbar {
     padding: var(--space-xl) var(--space-xl) 0 var(--space-xl);
     display: flex;
