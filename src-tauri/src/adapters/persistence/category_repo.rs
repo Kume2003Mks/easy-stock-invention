@@ -32,6 +32,22 @@ pub fn delete_category(conn: &Connection, category_id: &str) -> Result<(), AppEr
     Ok(())
 }
 
+pub fn update_category(conn: &Connection, category: &Category) -> Result<(), AppError> {
+    let rows_affected = conn.execute(
+        "UPDATE Categories SET name = ?1 WHERE category_id = ?2",
+        rusqlite::params![category.name, category.category_id],
+    )?;
+
+    if rows_affected == 0 {
+        return Err(AppError::NotFound(format!(
+            "ไม่พบหมวดหมู่รหัส {}",
+            category.category_id
+        )));
+    }
+
+    Ok(())
+}
+
 pub fn count_categories(conn: &Connection) -> Result<i64, AppError> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM Categories", [], |row| row.get(0))?;
     Ok(count)

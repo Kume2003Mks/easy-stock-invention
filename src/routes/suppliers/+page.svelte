@@ -75,6 +75,71 @@
   let deleteTargetId = $state<string | null>(null);
   let deleteTargetName = $state('');
 
+  // Edit supplier modal state
+  let showEditModal = $state(false);
+  let showEditConfirm = $state(false);
+  let editSupplier = $state({
+    supplier_id: '',
+    name: '',
+    contact_info: ''
+  });
+  let editFormErrors = $state<Record<string, string>>({});
+
+  function openEditModal(s: Supplier) {
+    editSupplier = {
+      supplier_id: s.supplier_id,
+      name: s.name,
+      contact_info: s.contact_info || ''
+    };
+    editFormErrors = {};
+    showEditModal = true;
+  }
+
+  function closeEditModal() {
+    showEditModal = false;
+    editFormErrors = {};
+  }
+
+  function validateEditForm(): boolean {
+    const errors: Record<string, string> = {};
+    if (!editSupplier.name.trim()) {
+      errors.name = 'กรุณากรอกชื่อผู้จัดจำหน่าย';
+    }
+    editFormErrors = errors;
+    return Object.keys(errors).length === 0;
+  }
+
+  function requestSaveEditSupplier() {
+    if (!validateEditForm()) return;
+    showEditConfirm = true;
+  }
+
+  function cancelEditConfirm() {
+    showEditConfirm = false;
+  }
+
+  async function confirmSaveEditSupplier() {
+    try {
+      const updated = (await invoke('update_supplier', {
+        supplier: {
+          supplier_id: editSupplier.supplier_id,
+          name: editSupplier.name.trim(),
+          contact_info: editSupplier.contact_info.trim() || null
+        }
+      })) as Supplier;
+
+      suppliers = suppliers.map((s) =>
+        s.supplier_id === updated.supplier_id ? updated : s
+      );
+      cancelEditConfirm();
+      closeEditModal();
+    } catch (err) {
+      console.error('Failed to update supplier:', err);
+      cancelEditConfirm();
+      showError(err, 'ไม่สามารถแก้ไขผู้จัดจำหน่ายได้');
+    }
+  }
+
   function clearFieldError(field: string) {
     if (formErrors[field]) {
       const { [field]: _removed, ...rest } = formErrors;
@@ -239,7 +304,7 @@
                       {
                         label: 'แก้ไขข้อมูล',
                         icon: 'edit',
-                        onclick: () => console.log('Edit supplier', s.supplier_id),
+                        onclick: () => openEditModal(s),
                       },
                       {
                         label: 'ลบผู้จัดจำหน่าย',
@@ -332,6 +397,73 @@
   variant="primary"
   onConfirm={confirmSaveSupplier}
   onCancel={cancelSave}
+/>
+
+<Modal
+  open={showEditModal}
+  title="แก้ไขข้อมูลผู้จัดจำหน่าย"
+  onClose={closeEditModal}
+  maxWidth="520px"
+>
+  <form
+    class="supplier-form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      requestSaveEditSupplier();
+    }}
+  >
+    <div class="form-grid">
+      <div class="form-group" class:has-error={!!editFormErrors.name}>
+        <label for="edit-supplier-name" class="form-label">ชื่อผู้จัดจำหน่าย *</label>
+        <input
+          id="edit-supplier-name"
+          type="text"
+          class="input-field"
+          class:input-error={!!editFormErrors.name}
+          placeholder="เช่น บริษัท โกลบอล เทรด"
+          bind:value={editSupplier.name}
+          oninput={() => {
+            if (editFormErrors.name) {
+              const { name: _n, ...rest } = editFormErrors;
+              editFormErrors = rest;
+            }
+          }}
+        />
+        {#if editFormErrors.name}
+          <span class="error-text">{editFormErrors.name}</span>
+        {/if}
+      </div>
+
+      <div class="form-group">
+        <label for="edit-supplier-contact" class="form-label">ข้อมูลติดต่อ</label>
+        <input
+          id="edit-supplier-contact"
+          type="text"
+          class="input-field"
+          placeholder="เช่น contact@email.com หรือ 02-123-4567"
+          bind:value={editSupplier.contact_info}
+        />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn-outline" onclick={closeEditModal}>
+        ยกเลิก
+      </button>
+      <button type="submit" class="btn-primary">บันทึกการแก้ไข</button>
+    </div>
+  </form>
+</Modal>
+
+<ConfirmModal
+  open={showEditConfirm}
+  title="ยืนยันการแก้ไขผู้จัดจำหน่าย"
+  message={`ต้องการบันทึกการแก้ไขผู้จัดจำหน่าย "${editSupplier.name.trim()}" ใช่หรือไม่?`}
+  confirmText="บันทึกการแก้ไข"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmSaveEditSupplier}
+  onCancel={cancelEditConfirm}
 />
 
 <ConfirmModal

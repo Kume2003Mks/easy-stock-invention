@@ -30,9 +30,11 @@ pub fn run() {
             adapters::commands::delete_product,
             adapters::commands::get_categories,
             adapters::commands::create_category,
+            adapters::commands::update_category,
             adapters::commands::delete_category,
             adapters::commands::get_suppliers,
             adapters::commands::create_supplier,
+            adapters::commands::update_supplier,
             adapters::commands::delete_supplier,
         ])
         .run(tauri::generate_context!())

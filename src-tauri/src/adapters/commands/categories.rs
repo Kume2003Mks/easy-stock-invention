@@ -30,6 +30,16 @@ pub fn create_category(
 }
 
 #[tauri::command]
+pub fn update_category(
+    state: State<'_, Mutex<Connection>>,
+    category: Category,
+) -> Result<Category, AppError> {
+    let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+    category_repo::update_category(&conn, &category)?;
+    Ok(category)
+}
+
+#[tauri::command]
 pub fn delete_category(
     state: State<'_, Mutex<Connection>>,
     category_id: String,

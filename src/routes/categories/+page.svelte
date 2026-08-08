@@ -71,6 +71,68 @@
   let deleteTargetId = $state<string | null>(null);
   let deleteTargetName = $state('');
 
+  // Edit category modal state
+  let showEditModal = $state(false);
+  let showEditConfirm = $state(false);
+  let editCategory = $state({
+    category_id: '',
+    name: ''
+  });
+  let editFormErrors = $state<Record<string, string>>({});
+
+  function openEditModal(c: Category) {
+    editCategory = {
+      category_id: c.category_id,
+      name: c.name
+    };
+    editFormErrors = {};
+    showEditModal = true;
+  }
+
+  function closeEditModal() {
+    showEditModal = false;
+    editFormErrors = {};
+  }
+
+  function validateEditForm(): boolean {
+    const errors: Record<string, string> = {};
+    if (!editCategory.name.trim()) {
+      errors.name = 'กรุณากรอกชื่อหมวดหมู่';
+    }
+    editFormErrors = errors;
+    return Object.keys(errors).length === 0;
+  }
+
+  function requestSaveEditCategory() {
+    if (!validateEditForm()) return;
+    showEditConfirm = true;
+  }
+
+  function cancelEditConfirm() {
+    showEditConfirm = false;
+  }
+
+  async function confirmSaveEditCategory() {
+    try {
+      const updated = (await invoke('update_category', {
+        category: {
+          category_id: editCategory.category_id,
+          name: editCategory.name.trim()
+        }
+      })) as Category;
+
+      categories = categories.map((c) =>
+        c.category_id === updated.category_id ? updated : c
+      );
+      cancelEditConfirm();
+      closeEditModal();
+    } catch (err) {
+      console.error('Failed to update category:', err);
+      cancelEditConfirm();
+      showError(err, 'ไม่สามารถแก้ไขหมวดหมู่ได้');
+    }
+  }
+
   function clearFieldError(field: string) {
     if (formErrors[field]) {
       const { [field]: _removed, ...rest } = formErrors;
@@ -230,7 +292,7 @@
                       {
                         label: 'แก้ไขหมวดหมู่',
                         icon: 'edit',
-                        onclick: () => console.log('Edit category', c.category_id),
+                        onclick: () => openEditModal(c),
                       },
                       {
                         label: 'ลบหมวดหมู่',
@@ -308,6 +370,60 @@
   variant="primary"
   onConfirm={confirmSaveCategory}
   onCancel={cancelSave}
+/>
+
+<Modal
+  open={showEditModal}
+  title="แก้ไขหมวดหมู่"
+  onClose={closeEditModal}
+  maxWidth="420px"
+>
+  <form
+    class="category-form"
+    onsubmit={(e) => {
+      e.preventDefault();
+      requestSaveEditCategory();
+    }}
+  >
+    <div class="form-group" class:has-error={!!editFormErrors.name}>
+      <label for="edit-category-name" class="form-label">ชื่อหมวดหมู่ *</label>
+      <input
+        id="edit-category-name"
+        type="text"
+        class="input-field"
+        class:input-error={!!editFormErrors.name}
+        placeholder="เช่น เครื่องดื่ม"
+        bind:value={editCategory.name}
+        oninput={() => {
+          if (editFormErrors.name) {
+            const { name: _n, ...rest } = editFormErrors;
+            editFormErrors = rest;
+          }
+        }}
+      />
+      {#if editFormErrors.name}
+        <span class="error-text">{editFormErrors.name}</span>
+      {/if}
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn-outline" onclick={closeEditModal}>
+        ยกเลิก
+      </button>
+      <button type="submit" class="btn-primary">บันทึกการแก้ไข</button>
+    </div>
+  </form>
+</Modal>
+
+<ConfirmModal
+  open={showEditConfirm}
+  title="ยืนยันการแก้ไขหมวดหมู่"
+  message={`ต้องการบันทึกการแก้ไขหมวดหมู่เป็น "${editCategory.name.trim()}" ใช่หรือไม่?`}
+  confirmText="บันทึกการแก้ไข"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmSaveEditCategory}
+  onCancel={cancelEditConfirm}
 />
 
 <ConfirmModal

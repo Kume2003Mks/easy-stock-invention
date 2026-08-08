@@ -30,6 +30,16 @@ pub fn create_supplier(
 }
 
 #[tauri::command]
+pub fn update_supplier(
+    state: State<'_, Mutex<Connection>>,
+    supplier: Supplier,
+) -> Result<Supplier, AppError> {
+    let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+    supplier_repo::update_supplier(&conn, &supplier)?;
+    Ok(supplier)
+}
+
+#[tauri::command]
 pub fn delete_supplier(
     state: State<'_, Mutex<Connection>>,
     supplier_id: String,

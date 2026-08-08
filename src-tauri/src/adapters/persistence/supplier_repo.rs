@@ -33,6 +33,22 @@ pub fn delete_supplier(conn: &Connection, supplier_id: &str) -> Result<(), AppEr
     Ok(())
 }
 
+pub fn update_supplier(conn: &Connection, supplier: &Supplier) -> Result<(), AppError> {
+    let rows_affected = conn.execute(
+        "UPDATE Suppliers SET name = ?1, contact_info = ?2 WHERE supplier_id = ?3",
+        rusqlite::params![supplier.name, supplier.contact_info, supplier.supplier_id],
+    )?;
+
+    if rows_affected == 0 {
+        return Err(AppError::NotFound(format!(
+            "ไม่พบผู้จัดจำหน่ายรหัส {}",
+            supplier.supplier_id
+        )));
+    }
+
+    Ok(())
+}
+
 pub fn count_suppliers(conn: &Connection) -> Result<i64, AppError> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM Suppliers", [], |row| row.get(0))?;
     Ok(count)
