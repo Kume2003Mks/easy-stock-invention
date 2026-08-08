@@ -1,12 +1,19 @@
 :root {
   /* Color Palette */
-  --color-primary: #5E81AC; /* Frost Blue */
-  --color-background: #F4F7FA; /* Icy Gray-Blue */
-  --color-surface: #FFFFFF; /* Pure White */
-  --color-text-primary: #2E3440; /* Deep Slate */
-  --color-muted: #D8DEE9; /* Soft Gray-Blue */
-  --color-accent-success: #A3BE8C; /* Sage Green */
-  --color-danger: #BF616A; /* Soft Red for delete/errors (Nord inspired) */
+  --color-primary: #5E81AC;
+  /* Frost Blue */
+  --color-background: #F4F7FA;
+  /* Icy Gray-Blue */
+  --color-surface: #FFFFFF;
+  /* Pure White */
+  --color-text-primary: #2E3440;
+  /* Deep Slate */
+  --color-muted: #D8DEE9;
+  /* Soft Gray-Blue */
+  --color-accent-success: #A3BE8C;
+  /* Sage Green */
+  --color-danger: #BF616A;
+  /* Soft Red for delete/errors (Nord inspired) */
 
   /* Typography */
   --font-heading: 'Outfit', 'Noto Sans Thai', sans-serif;
@@ -47,7 +54,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
   font-weight: 600;
   color: var(--color-text-primary);
@@ -123,7 +135,8 @@ button {
   border-collapse: collapse;
 }
 
-.data-table th, .data-table td {
+.data-table th,
+.data-table td {
   padding: var(--space-md) var(--space-lg);
   text-align: left;
   border-bottom: var(--border-subtle);
@@ -132,7 +145,6 @@ button {
 .data-table th {
   font-weight: 500;
   color: var(--color-text-primary);
-  opacity: 0.8;
   font-size: var(--text-small);
   text-transform: uppercase;
   letter-spacing: 0.5px;

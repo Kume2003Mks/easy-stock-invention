@@ -521,11 +521,12 @@
         <thead>
           <tr>
             <th>บาร์โค้ด</th>
-            <th>ชื่อสินค้า</th>
+            <th class="col-name">ชื่อสินค้า</th>
             <th>หมวดหมู่</th>
             <th>ผู้จัดจำหน่าย</th>
             <th>ต้นทุน</th>
             <th>ราคาขาย</th>
+            <th>ราคาส่ง</th>
             <th>คงเหลือ</th>
             <th class="col-actions">จัดการ</th>
           </tr>
@@ -534,11 +535,12 @@
           {#each paginatedProducts as p}
             <tr>
               <td>{p.barcode}</td>
-              <td class="font-medium">{p.name}</td>
+              <td class="font-medium col-name">{p.name}</td>
               <td>{getCategoryName(p.category_id)}</td>
               <td>{getSupplierName(p.supplier_id)}</td>
               <td>฿{p.cost_price.toFixed(2)}</td>
               <td>฿{p.selling_price.toFixed(2)}</td>
+              <td>฿{p.wholesale_price.toFixed(2)}</td>
               <td>
                 <span
                   class="badge {p.current_stock > p.reorder_level
@@ -715,6 +717,12 @@
   .font-medium {
     font-weight: 500;
     color: var(--color-text-primary);
+  }
+
+  /* Make the product name column wider */
+  .col-name {
+    min-width: 280px;
+    width: 30%;
   }
 
   .badge {

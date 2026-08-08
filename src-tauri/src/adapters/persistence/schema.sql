@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS Stock_Transactions (
 );
 
 -- 5. ตารางเก็บการตั้งค่าของแอปพลิเคชัน
-CREATE TABLE App_Settings (
+CREATE TABLE IF NOT EXISTS App_Settings (
     setting_key TEXT PRIMARY KEY,
     setting_value TEXT NOT NULL,
     description TEXT,
