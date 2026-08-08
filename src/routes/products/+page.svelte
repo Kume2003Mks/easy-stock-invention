@@ -1,400 +1,57 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
   import Dropdown from "$lib/components/Dropdown.svelte";
   import ActionMenu from "$lib/components/ActionMenu.svelte";
   import Modal from "$lib/components/Modal.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
-  let products = $state([
-    {
-      product_id: "P001",
-      barcode: "8850123456789",
-      name: "Premium Coffee Beans 500g",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 150,
-      selling_price: 250,
-      wholesale_price: 200,
-      current_stock: 45,
-      reorder_level: 20,
-    },
-    {
-      product_id: "P002",
-      barcode: "8850123456790",
-      name: "Oat Milk Barista Edition",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 80,
-      selling_price: 120,
-      wholesale_price: 100,
-      current_stock: 12,
-      reorder_level: 15,
-    },
-    {
-      product_id: "P003",
-      barcode: "8850123456791",
-      name: "Ceramic Mug Set",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 300,
-      selling_price: 550,
-      wholesale_price: 450,
-      current_stock: 8,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P004",
-      barcode: "8850123456792",
-      name: "Espresso Blend 1kg",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 280,
-      selling_price: 420,
-      wholesale_price: 360,
-      current_stock: 30,
-      reorder_level: 15,
-    },
-    {
-      product_id: "P005",
-      barcode: "8850123456793",
-      name: "Cold Brew Concentrate",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 120,
-      selling_price: 190,
-      wholesale_price: 160,
-      current_stock: 5,
-      reorder_level: 20,
-    },
-    {
-      product_id: "P006",
-      barcode: "8850123456794",
-      name: "Paper Cups 12oz (50pk)",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 90,
-      selling_price: 150,
-      wholesale_price: 120,
-      current_stock: 60,
-      reorder_level: 25,
-    },
-    {
-      product_id: "P007",
-      barcode: "8850123456795",
-      name: "Lid Inserts (50pk)",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 40,
-      selling_price: 80,
-      wholesale_price: 60,
-      current_stock: 75,
-      reorder_level: 30,
-    },
-    {
-      product_id: "P008",
-      barcode: "8850123456796",
-      name: "Caramel Syrup 1L",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 110,
-      selling_price: 180,
-      wholesale_price: 150,
-      current_stock: 18,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P009",
-      barcode: "8850123456797",
-      name: "Vanilla Syrup 1L",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 110,
-      selling_price: 180,
-      wholesale_price: 150,
-      current_stock: 22,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P010",
-      barcode: "8850123456798",
-      name: "Hazelnut Syrup 1L",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 110,
-      selling_price: 180,
-      wholesale_price: 150,
-      current_stock: 9,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P011",
-      barcode: "8850123456799",
-      name: "Whole Milk 1L",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 45,
-      selling_price: 70,
-      wholesale_price: 58,
-      current_stock: 40,
-      reorder_level: 20,
-    },
-    {
-      product_id: "P012",
-      barcode: "8850123456800",
-      name: "Almond Milk 1L",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 65,
-      selling_price: 95,
-      wholesale_price: 80,
-      current_stock: 15,
-      reorder_level: 12,
-    },
-    {
-      product_id: "P013",
-      barcode: "8850123456801",
-      name: "Soy Milk 1L",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 55,
-      selling_price: 85,
-      wholesale_price: 70,
-      current_stock: 28,
-      reorder_level: 12,
-    },
-    {
-      product_id: "P014",
-      barcode: "8850123456802",
-      name: "Dark Chocolate Bar 70%",
-      category_id: "C03",
-      supplier_id: "S02",
-      cost_price: 60,
-      selling_price: 120,
-      wholesale_price: 95,
-      current_stock: 35,
-      reorder_level: 15,
-    },
-    {
-      product_id: "P015",
-      barcode: "8850123456803",
-      name: "Milk Chocolate Bar",
-      category_id: "C03",
-      supplier_id: "S02",
-      cost_price: 55,
-      selling_price: 110,
-      wholesale_price: 88,
-      current_stock: 42,
-      reorder_level: 15,
-    },
-    {
-      product_id: "P016",
-      barcode: "8850123456804",
-      name: "Matcha Powder 200g",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 350,
-      selling_price: 520,
-      wholesale_price: 450,
-      current_stock: 7,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P017",
-      barcode: "8850123456805",
-      name: "Chai Tea Bags (25pk)",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 75,
-      selling_price: 130,
-      wholesale_price: 105,
-      current_stock: 20,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P018",
-      barcode: "8850123456806",
-      name: "Earl Grey Tea Bags (25pk)",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 70,
-      selling_price: 125,
-      wholesale_price: 100,
-      current_stock: 25,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P019",
-      barcode: "8850123456807",
-      name: "Glass Tumbler 16oz",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 120,
-      selling_price: 250,
-      wholesale_price: 200,
-      current_stock: 14,
-      reorder_level: 8,
-    },
-    {
-      product_id: "P020",
-      barcode: "8850123456808",
-      name: "Stainless Bottle 500ml",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 180,
-      selling_price: 350,
-      wholesale_price: 280,
-      current_stock: 11,
-      reorder_level: 8,
-    },
-    {
-      product_id: "P021",
-      barcode: "8850123456809",
-      name: "Croissant (Frozen 20pk)",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 200,
-      selling_price: 320,
-      wholesale_price: 260,
-      current_stock: 16,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P022",
-      barcode: "8850123456810",
-      name: "Bagel (Frozen 12pk)",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 150,
-      selling_price: 240,
-      wholesale_price: 195,
-      current_stock: 19,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P023",
-      barcode: "8850123456811",
-      name: "Muffin Mix 2kg",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 130,
-      selling_price: 210,
-      wholesale_price: 170,
-      current_stock: 6,
-      reorder_level: 8,
-    },
-    {
-      product_id: "P024",
-      barcode: "8850123456812",
-      name: "Brown Sugar 1kg",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 50,
-      selling_price: 90,
-      wholesale_price: 72,
-      current_stock: 33,
-      reorder_level: 15,
-    },
-    {
-      product_id: "P025",
-      barcode: "8850123456813",
-      name: "Honey 500g",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 140,
-      selling_price: 220,
-      wholesale_price: 180,
-      current_stock: 13,
-      reorder_level: 8,
-    },
-    {
-      product_id: "P026",
-      barcode: "8850123456814",
-      name: "Cinnamon Powder 100g",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 85,
-      selling_price: 140,
-      wholesale_price: 115,
-      current_stock: 21,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P027",
-      barcode: "8850123456815",
-      name: "Nutmeg Powder 100g",
-      category_id: "C03",
-      supplier_id: "S01",
-      cost_price: 95,
-      selling_price: 155,
-      wholesale_price: 125,
-      current_stock: 17,
-      reorder_level: 10,
-    },
-    {
-      product_id: "P028",
-      barcode: "8850123456816",
-      name: "Whipped Cream Canister",
-      category_id: "C01",
-      supplier_id: "S01",
-      cost_price: 70,
-      selling_price: 120,
-      wholesale_price: 98,
-      current_stock: 24,
-      reorder_level: 12,
-    },
-    {
-      product_id: "P029",
-      barcode: "8850123456817",
-      name: "Ice Cubes Tray (2pk)",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 30,
-      selling_price: 65,
-      wholesale_price: 50,
-      current_stock: 50,
-      reorder_level: 20,
-    },
-    {
-      product_id: "P030",
-      barcode: "8850123456818",
-      name: "Coffee Grinder Burr",
-      category_id: "C02",
-      supplier_id: "S02",
-      cost_price: 1200,
-      selling_price: 1800,
-      wholesale_price: 1500,
-      current_stock: 3,
-      reorder_level: 2,
-    },
-  ]);
+  interface Product {
+    product_id: string;
+    barcode: string | null;
+    name: string;
+    category_id: string | null;
+    supplier_id: string | null;
+    cost_price: number;
+    selling_price: number;
+    wholesale_price: number;
+    current_stock: number;
+    reorder_level: number;
+  }
 
-  let categories = $state([
-    { category_id: "C01", name: "เครื่องดื่ม" },
-    { category_id: "C02", name: "สินค้าทั่วไป" },
-    { category_id: "C03", name: "ขนมขบเคี้ยว" },
-  ]);
+  interface Category {
+    category_id: string;
+    name: string;
+  }
 
-  let suppliers = $state([
-    {
-      supplier_id: "S01",
-      name: "บริษัท โกลบอล เทรด",
-      contact_info: "contact@globaltrade.com",
-    },
-    {
-      supplier_id: "S02",
-      name: "ช่างฝีมือท้องถิ่น",
-      contact_info: "02-123-4567",
-    },
-  ]);
+  interface Supplier {
+    supplier_id: string;
+    name: string;
+    contact_info: string | null;
+  }
+
+  interface ProductsPageData {
+    products: Product[];
+    categories: Category[];
+    suppliers: Supplier[];
+  }
+
+  let products = $state<Product[]>([]);
+  let categories = $state<Category[]>([]);
+  let suppliers = $state<Supplier[]>([]);
+
+  let loading = $state(true);
+  let loadError = $state("");
 
   // Add product modal state
   let showAddModal = $state(false);
 
   // Save confirmation state
   let showSaveConfirm = $state(false);
-  let pendingProductName = $state('');
-  let pendingProductBarcode = $state('');
-  let pendingProductCategory = $state('');
-  let pendingProductSupplier = $state('');
+  let pendingProductName = $state("");
+  let pendingProductBarcode = $state("");
+  let pendingProductCategory = $state("");
+  let pendingProductSupplier = $state("");
   let pendingProductCost = $state(0);
   let pendingProductSelling = $state(0);
   let pendingProductWholesale = $state(0);
@@ -441,6 +98,26 @@
     return Object.keys(errors).length === 0;
   }
 
+  async function loadProductsData() {
+    loading = true;
+    loadError = "";
+    try {
+      const data = (await invoke("get_products_data")) as ProductsPageData;
+      products = data.products ?? [];
+      categories = data.categories ?? [];
+      suppliers = data.suppliers ?? [];
+    } catch (err) {
+      console.error("Failed to load products data:", err);
+      loadError = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(() => {
+    loadProductsData();
+  });
+
   function openAddModal() {
     // Reset form
     newProduct = {
@@ -473,7 +150,7 @@
     pendingProductCategory = getCategoryName(newProduct.category_id);
     pendingProductSupplier = newProduct.supplier_id
       ? getSupplierName(newProduct.supplier_id)
-      : '-';
+      : "-";
     pendingProductCost = Number(newProduct.cost_price) || 0;
     pendingProductSelling = Number(newProduct.selling_price) || 0;
     pendingProductWholesale = Number(newProduct.wholesale_price) || 0;
@@ -487,28 +164,32 @@
     showSaveConfirm = false;
   }
 
-  function confirmSaveProduct() {
-    // Generate next product_id
-    const nextId = `P${String(products.length + 1).padStart(3, "0")}`;
-
-    products = [
-      ...products,
-      {
-        product_id: nextId,
-        barcode: newProduct.barcode.trim(),
+  async function confirmSaveProduct() {
+    try {
+      const payload: Product = {
+        product_id: "",
+        barcode: newProduct.barcode.trim() || null,
         name: newProduct.name.trim(),
-        category_id: newProduct.category_id,
-        supplier_id: newProduct.supplier_id,
+        category_id: newProduct.category_id || null,
+        supplier_id: newProduct.supplier_id || null,
         cost_price: Number(newProduct.cost_price) || 0,
         selling_price: Number(newProduct.selling_price) || 0,
         wholesale_price: Number(newProduct.wholesale_price) || 0,
         current_stock: Number(newProduct.current_stock) || 0,
         reorder_level: Number(newProduct.reorder_level) || 10,
-      },
-    ];
+      };
 
-    cancelSave();
-    closeAddModal();
+      const saved = (await invoke("create_product", {
+        product: payload,
+      })) as Product;
+
+      products = [...products, saved];
+      cancelSave();
+      closeAddModal();
+    } catch (err) {
+      console.error("Failed to create product:", err);
+      alert(`ไม่สามารถบันทึกสินค้าได้: ${err}`);
+    }
   }
 
   // Pagination state
@@ -534,9 +215,11 @@
       if (q) {
         return (
           p.name.toLowerCase().includes(q) ||
-          p.barcode.toLowerCase().includes(q) ||
-          getCategoryName(p.category_id).toLowerCase().includes(q) ||
-          getSupplierName(p.supplier_id).toLowerCase().includes(q)
+          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+          (p.category_id &&
+            getCategoryName(p.category_id).toLowerCase().includes(q)) ||
+          (p.supplier_id &&
+            getSupplierName(p.supplier_id).toLowerCase().includes(q))
         );
       }
       return true;
@@ -561,7 +244,8 @@
     return filteredProducts.slice(offset, offset + pageSize);
   });
 
-  function getCategoryName(category_id: string): string {
+  function getCategoryName(category_id: string | null): string {
+    if (!category_id) return "-";
     return (
       categories.find((c) => c.category_id === category_id)?.name ?? category_id
     );
@@ -585,15 +269,15 @@
 
   // Export state
   let showExportModal = $state(false);
-  let exportScope = $state('all');
-  let exportCategory = $state('');
-  let exportFormat = $state('csv');
+  let exportScope = $state("all");
+  let exportCategory = $state("");
+  let exportFormat = $state("csv");
   let showExportConfirm = $state(false);
 
   function openExportModal() {
-    exportScope = 'all';
-    exportCategory = '';
-    exportFormat = 'csv';
+    exportScope = "all";
+    exportCategory = "";
+    exportFormat = "csv";
     showExportModal = true;
   }
 
@@ -610,8 +294,7 @@
   }
 
   function confirmExport() {
-    // TODO: Connect to backend export logic
-    console.log('Export products', {
+    console.log("Export products", {
       scope: exportScope,
       category: exportCategory,
       format: exportFormat,
@@ -623,12 +306,9 @@
   // Delete confirmation state
   let showDeleteConfirm = $state(false);
   let deleteTargetId = $state<string | null>(null);
-  let deleteTargetName = $state('');
+  let deleteTargetName = $state("");
 
-  function requestDeleteProduct(p: {
-    product_id: string;
-    name: string;
-  }) {
+  function requestDeleteProduct(p: { product_id: string; name: string }) {
     deleteTargetId = p.product_id;
     deleteTargetName = p.name;
     showDeleteConfirm = true;
@@ -637,12 +317,18 @@
   function cancelDeleteProduct() {
     showDeleteConfirm = false;
     deleteTargetId = null;
-    deleteTargetName = '';
+    deleteTargetName = "";
   }
 
-  function confirmDeleteProduct() {
+  async function confirmDeleteProduct() {
     if (deleteTargetId) {
-      products = products.filter((p) => p.product_id !== deleteTargetId);
+      try {
+        await invoke("delete_product", { productId: deleteTargetId });
+        products = products.filter((p) => p.product_id !== deleteTargetId);
+      } catch (err) {
+        console.error("Failed to delete product:", err);
+        alert(`ไม่สามารถลบสินค้าได้: ${err}`);
+      }
     }
     cancelDeleteProduct();
   }
@@ -722,59 +408,79 @@
           </tr>
         </thead>
         <tbody>
-          {#each paginatedProducts as p}
+          {#if loading}
             <tr>
-              <td>{p.barcode}</td>
-              <td class="font-medium col-name">{p.name}</td>
-              <td>{getCategoryName(p.category_id)}</td>
-              <td>{getSupplierName(p.supplier_id)}</td>
-              <td>฿{p.cost_price.toFixed(2)}</td>
-              <td>฿{p.selling_price.toFixed(2)}</td>
-              <td>฿{p.wholesale_price.toFixed(2)}</td>
-              <td>
-                <span
-                  class="badge {p.current_stock > p.reorder_level
-                    ? 'badge-success'
-                    : 'badge-warning'}"
-                >
-                  {p.current_stock}
-                </span>
+              <td colspan="9" class="loading-state">
+                <div class="spinner"></div>
+                <span>กำลังโหลดข้อมูลสินค้า...</span>
               </td>
-              <td class="col-actions">
-                <ActionMenu
-                  align="right"
-                  items={[
-                    {
-                      label: "แก้ไขข้อมูล",
-                      icon: "edit",
-                      onclick: () => console.log("Edit product", p.product_id),
-                    },
-                    {
-                      label: "ปรับปรุงสต็อก",
-                      icon: "adjust",
-                      onclick: () => console.log("Adjust stock", p.product_id),
-                    },
-                    {
-                      label: "ประวัติสินค้า",
-                      icon: "history",
-                      onclick: () =>
-                        console.log("Product history", p.product_id),
-                    },
-                    {
-                      label: "ลบสินค้า",
-                      icon: "delete",
-                      variant: "danger",
-                      onclick: () => requestDeleteProduct(p),
-                    },
-                  ]}
-                />
+            </tr>
+          {:else if loadError}
+            <tr>
+              <td colspan="9" class="error-state">
+                <span>เกิดข้อผิดพลาดในการโหลดข้อมูล: {loadError}</span>
+                <button class="btn-outline btn-sm" onclick={loadProductsData}>
+                  ลองใหม่อีกครั้ง
+                </button>
               </td>
             </tr>
           {:else}
-            <tr>
-              <td colspan="8" class="empty-state">ไม่พบสินค้า</td>
-            </tr>
-          {/each}
+            {#each paginatedProducts as p}
+              <tr>
+                <td>{p.barcode || "-"}</td>
+                <td class="font-medium col-name">{p.name}</td>
+                <td>{getCategoryName(p.category_id)}</td>
+                <td>{getSupplierName(p.supplier_id)}</td>
+                <td>฿{p.cost_price.toFixed(2)}</td>
+                <td>฿{p.selling_price.toFixed(2)}</td>
+                <td>฿{p.wholesale_price.toFixed(2)}</td>
+                <td>
+                  <span
+                    class="badge {p.current_stock > p.reorder_level
+                      ? 'badge-success'
+                      : 'badge-warning'}"
+                  >
+                    {p.current_stock}
+                  </span>
+                </td>
+                <td class="col-actions">
+                  <ActionMenu
+                    align="right"
+                    items={[
+                      {
+                        label: "แก้ไขข้อมูล",
+                        icon: "edit",
+                        onclick: () =>
+                          console.log("Edit product", p.product_id),
+                      },
+                      {
+                        label: "ปรับปรุงสต็อก",
+                        icon: "adjust",
+                        onclick: () =>
+                          console.log("Adjust stock", p.product_id),
+                      },
+                      {
+                        label: "ประวัติสินค้า",
+                        icon: "history",
+                        onclick: () =>
+                          console.log("Product history", p.product_id),
+                      },
+                      {
+                        label: "ลบสินค้า",
+                        icon: "delete",
+                        variant: "danger",
+                        onclick: () => requestDeleteProduct(p),
+                      },
+                    ]}
+                  />
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="9" class="empty-state">ไม่พบสินค้า</td>
+              </tr>
+            {/each}
+          {/if}
         </tbody>
       </table>
     </div>
@@ -994,7 +700,8 @@
       </div>
 
       <div class="form-group">
-        <label for="product-reorder" class="form-label">ระดับสต็อกขั้นต่ำ</label>
+        <label for="product-reorder" class="form-label">ระดับสต็อกขั้นต่ำ</label
+        >
         <input
           id="product-reorder"
           type="number"
@@ -1204,6 +911,8 @@
     padding: var(--space-xl);
     flex: 1;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 
   .table-actions {
@@ -1224,6 +933,8 @@
   .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    flex: 1;
+    min-height: 180px;
   }
 
   .data-table {
@@ -1263,6 +974,48 @@
     padding: var(--space-xl);
     color: var(--color-text-primary);
     opacity: 0.6;
+  }
+
+  .loading-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-text-primary);
+    opacity: 0.7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--color-primary);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .error-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-danger);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .btn-sm {
+    padding: 4px 12px;
+    font-size: 13px;
   }
 
   /* Pagination bar — space between info, pagination, and page size selector */

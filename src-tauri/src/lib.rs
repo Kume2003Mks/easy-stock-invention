@@ -23,6 +23,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             adapters::commands::get_settings,
             adapters::commands::save_settings,
+            adapters::commands::get_products_data,
+            adapters::commands::create_product,
+            adapters::commands::delete_product,
+            adapters::commands::get_categories,
+            adapters::commands::create_category,
+            adapters::commands::delete_category,
+            adapters::commands::get_suppliers,
+            adapters::commands::create_supplier,
+            adapters::commands::delete_supplier,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

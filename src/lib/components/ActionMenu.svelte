@@ -38,11 +38,11 @@
     const viewportSpaceBelow = window.innerHeight - rect.bottom;
     const viewportSpaceAbove = rect.top;
 
-    // Space relative to nearest bounding container (e.g. .card, .content-area)
+    // Space relative to nearest bounding container (e.g. .table-wrapper, .card, .content-area)
     const container =
+      containerRef.closest('.table-wrapper') ||
       containerRef.closest('.card') ||
-      containerRef.closest('.content-area') ||
-      containerRef.closest('.table-wrapper');
+      containerRef.closest('.content-area');
     
     let containerSpaceBelow = viewportSpaceBelow;
     let containerSpaceAbove = viewportSpaceAbove;
@@ -328,6 +328,8 @@
   .action-menu-dropdown.open-upward {
     top: auto;
     bottom: calc(100% + 4px);
+    box-shadow: 0 -10px 25px -5px rgba(46, 52, 64, 0.12),
+                0 -4px 10px rgba(46, 52, 64, 0.05);
     animation: menuSlideUp 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 

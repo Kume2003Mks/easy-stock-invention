@@ -114,6 +114,15 @@ button {
   background-color: var(--color-background);
 }
 
+/* Content Area */
+.content-area {
+  padding: var(--space-xl);
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Card */
 .card {
   background-color: var(--color-surface);
@@ -121,13 +130,24 @@ button {
   border-radius: var(--radius-lg);
   padding: var(--space-xl);
   box-shadow: var(--shadow-none);
-  min-height: 280px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Table */
 .table-wrapper {
   overflow-x: auto;
   position: relative;
+  flex: 1;
+  min-height: 180px;
+}
+
+.pagination-bar {
+  position: relative;
+  z-index: 10;
+  margin-top: auto;
+  padding-top: var(--space-lg);
 }
 
 .data-table {

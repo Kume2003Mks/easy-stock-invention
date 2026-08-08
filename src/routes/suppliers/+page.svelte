@@ -1,12 +1,19 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
+  import { onMount } from 'svelte';
   import ActionMenu from '$lib/components/ActionMenu.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
-  let suppliers = $state([
-    { supplier_id: 'S01', name: 'บริษัท โกลบอล เทรด', contact_info: 'contact@globaltrade.com' },
-    { supplier_id: 'S02', name: 'ช่างฝีมือท้องถิ่น', contact_info: '02-123-4567' }
-  ]);
+  interface Supplier {
+    supplier_id: string;
+    name: string;
+    contact_info: string | null;
+  }
+
+  let suppliers = $state<Supplier[]>([]);
+  let loading = $state(true);
+  let loadError = $state('');
 
   // Add modal state
   let showAddModal = $state(false);
@@ -48,6 +55,24 @@
     return Object.keys(errors).length === 0;
   }
 
+  async function loadSuppliers() {
+    loading = true;
+    loadError = '';
+    try {
+      const result = (await invoke('get_suppliers')) as Supplier[];
+      suppliers = result ?? [];
+    } catch (err) {
+      console.error('Failed to load suppliers:', err);
+      loadError = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(() => {
+    loadSuppliers();
+  });
+
   function openAddModal() {
     newSupplier = { name: '', contact_info: '' };
     formErrors = {};
@@ -73,19 +98,23 @@
     pendingSupplierContact = '';
   }
 
-  function confirmSaveSupplier() {
-    const nextId = `S${String(suppliers.length + 1).padStart(2, '0')}`;
-    suppliers = [
-      ...suppliers,
-      {
-        supplier_id: nextId,
-        name: newSupplier.name.trim(),
-        contact_info: newSupplier.contact_info.trim()
-      }
-    ];
+  async function confirmSaveSupplier() {
+    try {
+      const saved = (await invoke('create_supplier', {
+        supplier: {
+          supplier_id: '',
+          name: newSupplier.name.trim(),
+          contact_info: newSupplier.contact_info.trim() || null
+        }
+      })) as Supplier;
 
-    cancelSave();
-    closeAddModal();
+      suppliers = [...suppliers, saved];
+      cancelSave();
+      closeAddModal();
+    } catch (err) {
+      console.error('Failed to create supplier:', err);
+      alert(`ไม่สามารถบันทึกผู้จัดจำหน่ายได้: ${err}`);
+    }
   }
 
   function requestDeleteSupplier(s: { supplier_id: string; name: string }) {
@@ -100,9 +129,15 @@
     deleteTargetName = '';
   }
 
-  function confirmDeleteSupplier() {
+  async function confirmDeleteSupplier() {
     if (deleteTargetId) {
-      suppliers = suppliers.filter((s) => s.supplier_id !== deleteTargetId);
+      try {
+        await invoke('delete_supplier', { supplierId: deleteTargetId });
+        suppliers = suppliers.filter((s) => s.supplier_id !== deleteTargetId);
+      } catch (err) {
+        console.error('Failed to delete supplier:', err);
+        alert(`ไม่สามารถลบผู้จัดจำหน่ายได้: ${err}`);
+      }
     }
     cancelDelete();
   }
@@ -119,42 +154,60 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>รหัสผู้จัดจำหน่าย</th>
-            <th>ชื่อ</th>
-            <th>ข้อมูลติดต่อ</th>
+            <th class="col-id">รหัสผู้จัดจำหน่าย</th>
+            <th class="col-name">ชื่อ</th>
+            <th class="col-contact">ข้อมูลติดต่อ</th>
             <th class="col-actions">จัดการ</th>
           </tr>
         </thead>
         <tbody>
-          {#each suppliers as s}
+          {#if loading}
             <tr>
-              <td>{s.supplier_id}</td>
-              <td class="font-medium">{s.name}</td>
-              <td>{s.contact_info}</td>
-              <td class="col-actions">
-                <ActionMenu
-                  align="right"
-                  items={[
-                    {
-                      label: 'แก้ไขข้อมูล',
-                      icon: 'edit',
-                      onclick: () => console.log('Edit supplier', s.supplier_id),
-                    },
-                    {
-                      label: 'ลบผู้จัดจำหน่าย',
-                      icon: 'delete',
-                      variant: 'danger',
-                      onclick: () => requestDeleteSupplier(s),
-                    },
-                  ]}
-                />
+              <td colspan="4" class="loading-state">
+                <div class="spinner"></div>
+                <span>กำลังโหลดผู้จัดจำหน่าย...</span>
+              </td>
+            </tr>
+          {:else if loadError}
+            <tr>
+              <td colspan="4" class="error-state">
+                <span>เกิดข้อผิดพลาดในการโหลดข้อมูล: {loadError}</span>
+                <button class="btn-outline btn-sm" onclick={loadSuppliers}>
+                  ลองใหม่อีกครั้ง
+                </button>
               </td>
             </tr>
           {:else}
-            <tr>
-              <td colspan="4" class="empty-state">ไม่พบผู้จัดจำหน่าย</td>
-            </tr>
-          {/each}
+            {#each suppliers as s}
+              <tr>
+                <td class="id-cell col-id">{s.supplier_id}</td>
+                <td class="font-medium col-name">{s.name}</td>
+                <td class="col-contact">{s.contact_info || '-'}</td>
+                <td class="col-actions">
+                  <ActionMenu
+                    align="right"
+                    items={[
+                      {
+                        label: 'แก้ไขข้อมูล',
+                        icon: 'edit',
+                        onclick: () => console.log('Edit supplier', s.supplier_id),
+                      },
+                      {
+                        label: 'ลบผู้จัดจำหน่าย',
+                        icon: 'delete',
+                        variant: 'danger',
+                        onclick: () => requestDeleteSupplier(s),
+                      },
+                    ]}
+                  />
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="4" class="empty-state">ไม่พบผู้จัดจำหน่าย</td>
+              </tr>
+            {/each}
+          {/if}
         </tbody>
       </table>
     </div>
@@ -252,6 +305,23 @@
     padding: var(--space-xl);
     flex: 1;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .col-id {
+    width: 320px;
+    min-width: 280px;
+    max-width: 340px;
+  }
+
+  .col-name {
+    width: 260px;
+    min-width: 200px;
+  }
+
+  .col-contact {
+    width: auto;
   }
 
   .font-medium {
@@ -259,11 +329,60 @@
     color: var(--color-text-primary);
   }
 
+  .id-cell {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    color: var(--color-text-secondary, #6b7280);
+    letter-spacing: -0.2px;
+  }
+
   .empty-state {
     text-align: center;
     padding: var(--space-xl);
     color: var(--color-text-primary);
     opacity: 0.6;
+  }
+
+  .loading-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-text-primary);
+    opacity: 0.7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--color-primary);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .error-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-danger);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .btn-sm {
+    padding: 4px 12px;
+    font-size: 13px;
   }
 
   .supplier-form {

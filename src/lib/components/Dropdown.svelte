@@ -91,11 +91,13 @@
     const viewportSpaceBelow = window.innerHeight - rect.bottom;
     const viewportSpaceAbove = rect.top;
 
-    // Space relative to nearest container (.card, .content-area)
+    // Space relative to nearest container (.table-wrapper, .modal-content, .card, .content-area)
     const container =
+      containerRef.closest('.table-wrapper') ||
+      containerRef.closest('.modal-content') ||
+      containerRef.closest('.modal-box') ||
       containerRef.closest('.card') ||
-      containerRef.closest('.content-area') ||
-      containerRef.closest('.table-wrapper');
+      containerRef.closest('.content-area');
     
     let containerSpaceBelow = viewportSpaceBelow;
     let containerSpaceAbove = viewportSpaceAbove;
@@ -121,6 +123,26 @@
     const spaceRight = window.innerWidth - rect.left;
     alignRight = spaceRight < 240 && rect.right > 200;
   }
+
+  // Ensure parent wrapper (.pagination-bar, .table-actions, table cells) has elevated z-index when open
+  $effect(() => {
+    if (!containerRef) return;
+    const parentBar = containerRef.closest('.pagination-bar') as HTMLElement | null;
+    const parentActions = containerRef.closest('.table-actions') as HTMLElement | null;
+    const parentRow = containerRef.closest('tr') as HTMLElement | null;
+    const parentTd = containerRef.closest('td') as HTMLElement | null;
+    if (isOpen) {
+      if (parentBar) parentBar.style.zIndex = '30';
+      if (parentActions) parentActions.style.zIndex = '30';
+      if (parentRow) parentRow.style.zIndex = '30';
+      if (parentTd) parentTd.style.zIndex = '30';
+    } else {
+      if (parentBar) parentBar.style.zIndex = '';
+      if (parentActions) parentActions.style.zIndex = '';
+      if (parentRow) parentRow.style.zIndex = '';
+      if (parentTd) parentTd.style.zIndex = '';
+    }
+  });
 
   function toggleOpen() {
     if (disabled) return;
@@ -589,6 +611,8 @@
   .dropdown-menu-container.open-upward {
     top: auto;
     bottom: calc(100% + 6px);
+    box-shadow: 0 -12px 32px rgba(46, 52, 64, 0.12),
+                0 -4px 12px rgba(46, 52, 64, 0.05);
     animation: dropdownSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 

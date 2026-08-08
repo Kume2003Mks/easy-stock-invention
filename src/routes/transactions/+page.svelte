@@ -23,32 +23,34 @@
 
 <div class="content-area">
   <div class="card">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>วันที่</th>
-          <th>สินค้า</th>
-          <th>ประเภท</th>
-          <th>จำนวน</th>
-          <th>อ้างอิง</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each transactions as tx}
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
           <tr>
-            <td>{tx.transaction_date}</td>
-            <td class="font-medium">{getProductName(tx.product_id)}</td>
-            <td>
-              <span class="badge {tx.transaction_type === 'IN' ? 'badge-success' : tx.transaction_type === 'OUT' ? 'badge-primary' : 'badge-neutral'}">
-                {tx.transaction_type === 'IN' ? 'รับเข้า' : tx.transaction_type === 'OUT' ? 'จ่ายออก' : 'ปรับปรุง'}
-              </span>
-            </td>
-            <td>{tx.quantity > 0 ? '+' + tx.quantity : tx.quantity}</td>
-            <td>{tx.reference_no}</td>
+            <th>วันที่</th>
+            <th>สินค้า</th>
+            <th>ประเภท</th>
+            <th>จำนวน</th>
+            <th>อ้างอิง</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each transactions as tx}
+            <tr>
+              <td>{tx.transaction_date}</td>
+              <td class="font-medium">{getProductName(tx.product_id)}</td>
+              <td>
+                <span class="badge {tx.transaction_type === 'IN' ? 'badge-success' : tx.transaction_type === 'OUT' ? 'badge-primary' : 'badge-neutral'}">
+                  {tx.transaction_type === 'IN' ? 'รับเข้า' : tx.transaction_type === 'OUT' ? 'จ่ายออก' : 'ปรับปรุง'}
+                </span>
+              </td>
+              <td>{tx.quantity > 0 ? '+' + tx.quantity : tx.quantity}</td>
+              <td>{tx.reference_no}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -68,6 +70,8 @@
     padding: var(--space-xl);
     flex: 1;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 
   .font-medium {

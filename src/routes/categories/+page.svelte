@@ -1,13 +1,18 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
+  import { onMount } from 'svelte';
   import ActionMenu from '$lib/components/ActionMenu.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
 
-  let categories = $state([
-    { category_id: 'C01', name: 'เครื่องดื่ม' },
-    { category_id: 'C02', name: 'สินค้าทั่วไป' },
-    { category_id: 'C03', name: 'ขนมขบเคี้ยว' }
-  ]);
+  interface Category {
+    category_id: string;
+    name: string;
+  }
+
+  let categories = $state<Category[]>([]);
+  let loading = $state(true);
+  let loadError = $state('');
 
   // Add modal state
   let showAddModal = $state(false);
@@ -47,6 +52,24 @@
     return Object.keys(errors).length === 0;
   }
 
+  async function loadCategories() {
+    loading = true;
+    loadError = '';
+    try {
+      const result = (await invoke('get_categories')) as Category[];
+      categories = result ?? [];
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+      loadError = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(() => {
+    loadCategories();
+  });
+
   function openAddModal() {
     newCategory = { name: '' };
     formErrors = {};
@@ -70,18 +93,22 @@
     pendingCategoryName = '';
   }
 
-  function confirmSaveCategory() {
-    const nextId = `C${String(categories.length + 1).padStart(2, '0')}`;
-    categories = [
-      ...categories,
-      {
-        category_id: nextId,
-        name: newCategory.name.trim()
-      }
-    ];
+  async function confirmSaveCategory() {
+    try {
+      const saved = (await invoke('create_category', {
+        category: {
+          category_id: '',
+          name: newCategory.name.trim()
+        }
+      })) as Category;
 
-    cancelSave();
-    closeAddModal();
+      categories = [...categories, saved];
+      cancelSave();
+      closeAddModal();
+    } catch (err) {
+      console.error('Failed to create category:', err);
+      alert(`ไม่สามารถบันทึกหมวดหมู่ได้: ${err}`);
+    }
   }
 
   function requestDeleteCategory(c: { category_id: string; name: string }) {
@@ -96,9 +123,15 @@
     deleteTargetName = '';
   }
 
-  function confirmDeleteCategory() {
+  async function confirmDeleteCategory() {
     if (deleteTargetId) {
-      categories = categories.filter((c) => c.category_id !== deleteTargetId);
+      try {
+        await invoke('delete_category', { categoryId: deleteTargetId });
+        categories = categories.filter((c) => c.category_id !== deleteTargetId);
+      } catch (err) {
+        console.error('Failed to delete category:', err);
+        alert(`ไม่สามารถลบหมวดหมู่ได้: ${err}`);
+      }
     }
     cancelDelete();
   }
@@ -115,40 +148,58 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>รหัสหมวดหมู่</th>
-            <th>ชื่อหมวดหมู่</th>
+            <th class="col-id">รหัสหมวดหมู่</th>
+            <th class="col-name">ชื่อหมวดหมู่</th>
             <th class="col-actions">จัดการ</th>
           </tr>
         </thead>
         <tbody>
-          {#each categories as c}
+          {#if loading}
             <tr>
-              <td>{c.category_id}</td>
-              <td class="font-medium">{c.name}</td>
-              <td class="col-actions">
-                <ActionMenu
-                  align="right"
-                  items={[
-                    {
-                      label: 'แก้ไขหมวดหมู่',
-                      icon: 'edit',
-                      onclick: () => console.log('Edit category', c.category_id),
-                    },
-                    {
-                      label: 'ลบหมวดหมู่',
-                      icon: 'delete',
-                      variant: 'danger',
-                      onclick: () => requestDeleteCategory(c),
-                    },
-                  ]}
-                />
+              <td colspan="3" class="loading-state">
+                <div class="spinner"></div>
+                <span>กำลังโหลดหมวดหมู่...</span>
+              </td>
+            </tr>
+          {:else if loadError}
+            <tr>
+              <td colspan="3" class="error-state">
+                <span>เกิดข้อผิดพลาดในการโหลดข้อมูล: {loadError}</span>
+                <button class="btn-outline btn-sm" onclick={loadCategories}>
+                  ลองใหม่อีกครั้ง
+                </button>
               </td>
             </tr>
           {:else}
-            <tr>
-              <td colspan="3" class="empty-state">ไม่พบหมวดหมู่</td>
-            </tr>
-          {/each}
+            {#each categories as c}
+              <tr>
+                <td class="id-cell col-id">{c.category_id}</td>
+                <td class="font-medium col-name">{c.name}</td>
+                <td class="col-actions">
+                  <ActionMenu
+                    align="right"
+                    items={[
+                      {
+                        label: 'แก้ไขหมวดหมู่',
+                        icon: 'edit',
+                        onclick: () => console.log('Edit category', c.category_id),
+                      },
+                      {
+                        label: 'ลบหมวดหมู่',
+                        icon: 'delete',
+                        variant: 'danger',
+                        onclick: () => requestDeleteCategory(c),
+                      },
+                    ]}
+                  />
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="3" class="empty-state">ไม่พบหมวดหมู่</td>
+              </tr>
+            {/each}
+          {/if}
         </tbody>
       </table>
     </div>
@@ -231,6 +282,18 @@
     padding: var(--space-xl);
     flex: 1;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .col-id {
+    width: 320px;
+    min-width: 280px;
+    max-width: 340px;
+  }
+
+  .col-name {
+    width: auto;
   }
 
   .font-medium {
@@ -238,11 +301,60 @@
     color: var(--color-text-primary);
   }
 
+  .id-cell {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    color: var(--color-text-secondary, #6b7280);
+    letter-spacing: -0.2px;
+  }
+
   .empty-state {
     text-align: center;
     padding: var(--space-xl);
     color: var(--color-text-primary);
     opacity: 0.6;
+  }
+
+  .loading-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-text-primary);
+    opacity: 0.7;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--color-primary);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .error-state {
+    text-align: center;
+    padding: var(--space-xl);
+    color: var(--color-danger);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .btn-sm {
+    padding: 4px 12px;
+    font-size: 13px;
   }
 
   .category-form {
