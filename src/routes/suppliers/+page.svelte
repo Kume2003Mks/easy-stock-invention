@@ -4,6 +4,7 @@
   import ActionMenu from '$lib/components/ActionMenu.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   interface Supplier {
     supplier_id: string;
@@ -14,6 +15,27 @@
   let suppliers = $state<Supplier[]>([]);
   let loading = $state(true);
   let loadError = $state('');
+
+  // Search & Pagination state
+  let searchQuery = $state('');
+  let currentPage = $state(1);
+  let pageSize = $state(10);
+
+  let filteredSuppliers = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return suppliers;
+    return suppliers.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.contact_info && s.contact_info.toLowerCase().includes(q)) ||
+        s.supplier_id.toLowerCase().includes(q)
+    );
+  });
+
+  let paginatedSuppliers = $derived.by(() => {
+    const offset = (currentPage - 1) * pageSize;
+    return filteredSuppliers.slice(offset, offset + pageSize);
+  });
 
   // Add modal state
   let showAddModal = $state(false);
@@ -150,6 +172,16 @@
 
 <div class="content-area">
   <div class="card">
+    <div class="table-actions">
+      <input
+        type="text"
+        class="input-field search-input"
+        placeholder="ค้นหาด้วยชื่อ, ข้อมูลติดต่อ หรือรหัสผู้จัดจำหน่าย..."
+        bind:value={searchQuery}
+        oninput={() => (currentPage = 1)}
+      />
+    </div>
+
     <div class="table-wrapper">
       <table class="data-table">
         <thead>
@@ -178,7 +210,7 @@
               </td>
             </tr>
           {:else}
-            {#each suppliers as s}
+            {#each paginatedSuppliers as s}
               <tr>
                 <td class="id-cell col-id">{s.supplier_id}</td>
                 <td class="font-medium col-name">{s.name}</td>
@@ -211,6 +243,13 @@
         </tbody>
       </table>
     </div>
+
+    <Pagination
+      bind:currentPage
+      bind:pageSize
+      totalItems={filteredSuppliers.length}
+      itemLabel="ผู้จัดจำหน่าย"
+    />
   </div>
 </div>
 
@@ -307,6 +346,20 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+  }
+
+  .table-actions {
+    margin-bottom: var(--space-lg);
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    max-width: 400px;
+    flex: 1;
+    min-width: 200px;
   }
 
   .col-id {

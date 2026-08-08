@@ -4,6 +4,7 @@
   import ActionMenu from '$lib/components/ActionMenu.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ConfirmModal from '$lib/components/ConfirmModal.svelte';
+  import Pagination from '$lib/components/Pagination.svelte';
 
   interface Category {
     category_id: string;
@@ -13,6 +14,26 @@
   let categories = $state<Category[]>([]);
   let loading = $state(true);
   let loadError = $state('');
+
+  // Search & Pagination state
+  let searchQuery = $state('');
+  let currentPage = $state(1);
+  let pageSize = $state(10);
+
+  let filteredCategories = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return categories;
+    return categories.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.category_id.toLowerCase().includes(q)
+    );
+  });
+
+  let paginatedCategories = $derived.by(() => {
+    const offset = (currentPage - 1) * pageSize;
+    return filteredCategories.slice(offset, offset + pageSize);
+  });
 
   // Add modal state
   let showAddModal = $state(false);
@@ -144,6 +165,16 @@
 
 <div class="content-area">
   <div class="card">
+    <div class="table-actions">
+      <input
+        type="text"
+        class="input-field search-input"
+        placeholder="ค้นหาด้วยชื่อ หรือรหัสหมวดหมู่..."
+        bind:value={searchQuery}
+        oninput={() => (currentPage = 1)}
+      />
+    </div>
+
     <div class="table-wrapper">
       <table class="data-table">
         <thead>
@@ -171,7 +202,7 @@
               </td>
             </tr>
           {:else}
-            {#each categories as c}
+            {#each paginatedCategories as c}
               <tr>
                 <td class="id-cell col-id">{c.category_id}</td>
                 <td class="font-medium col-name">{c.name}</td>
@@ -203,6 +234,13 @@
         </tbody>
       </table>
     </div>
+
+    <Pagination
+      bind:currentPage
+      bind:pageSize
+      totalItems={filteredCategories.length}
+      itemLabel="หมวดหมู่"
+    />
   </div>
 </div>
 
@@ -284,6 +322,20 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+  }
+
+  .table-actions {
+    margin-bottom: var(--space-lg);
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    max-width: 400px;
+    flex: 1;
+    min-width: 200px;
   }
 
   .col-id {

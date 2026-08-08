@@ -5,6 +5,7 @@
   import ActionMenu from "$lib/components/ActionMenu.svelte";
   import Modal from "$lib/components/Modal.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Pagination from "$lib/components/Pagination.svelte";
 
   interface Product {
     product_id: string;
@@ -195,7 +196,6 @@
   // Pagination state
   let currentPage = $state(1); // 1-based
   let pageSize = $state(10); // default 10
-  const pageSizeOptions = [10, 25, 50, 75, 100];
 
   // Search state
   let searchQuery = $state("");
@@ -226,18 +226,6 @@
     });
   });
 
-  // Total pages (recomputed when filters/totals/pageSize change)
-  let totalPages = $derived(
-    Math.max(1, Math.ceil(filteredProducts.length / pageSize)),
-  );
-
-  // Clamp current page when totalPages changes
-  $effect(() => {
-    if (currentPage > totalPages) {
-      currentPage = totalPages;
-    }
-  });
-
   // Paginated slice — convert 1-based page to 0-based offset in exactly one place
   let paginatedProducts = $derived.by(() => {
     const offset = (currentPage - 1) * pageSize;
@@ -256,11 +244,6 @@
     return (
       suppliers.find((s) => s.supplier_id === supplier_id)?.name ?? supplier_id
     );
-  }
-
-  function setPageSize(size: number) {
-    pageSize = size;
-    currentPage = 1; // reset to first page when page size changes
   }
 
   function setCategoryFilter() {
@@ -331,34 +314,6 @@
       }
     }
     cancelDeleteProduct();
-  }
-
-  // Generate pagination items with ellipsis for collapsed ranges
-  function getPageItems(
-    current: number,
-    total: number,
-  ): (number | "ellipsis")[] {
-    if (total <= 7) {
-      return Array.from({ length: total }, (_, i) => i + 1);
-    }
-    const pages = new Set<number>([
-      1,
-      total,
-      current - 1,
-      current,
-      current + 1,
-    ]);
-    const sorted = [...pages]
-      .filter((p) => p >= 1 && p <= total)
-      .sort((a, b) => a - b);
-    const items: (number | "ellipsis")[] = [];
-    let prev = 0;
-    for (const p of sorted) {
-      if (p - prev > 1) items.push("ellipsis");
-      items.push(p);
-      prev = p;
-    }
-    return items;
   }
 </script>
 
@@ -460,12 +415,6 @@
                           console.log("Adjust stock", p.product_id),
                       },
                       {
-                        label: "ประวัติสินค้า",
-                        icon: "history",
-                        onclick: () =>
-                          console.log("Product history", p.product_id),
-                      },
-                      {
                         label: "ลบสินค้า",
                         icon: "delete",
                         variant: "danger",
@@ -485,86 +434,12 @@
       </table>
     </div>
 
-    <div class="pagination-bar">
-      <div class="pagination-info">
-        แสดง {paginatedProducts.length > 0
-          ? (currentPage - 1) * pageSize + 1
-          : 0}–{Math.min(currentPage * pageSize, filteredProducts.length)} จาก {filteredProducts.length}
-        รายการ
-      </div>
-
-      {#if totalPages > 1}
-        <nav aria-label="pagination" class="pagination">
-          <button
-            class="page-btn"
-            aria-label="ไปหน้าก่อนหน้า"
-            disabled={currentPage === 1}
-            onclick={() => (currentPage = Math.max(1, currentPage - 1))}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </button>
-
-          {#each getPageItems(currentPage, totalPages) as item}
-            {#if item === "ellipsis"}
-              <span class="page-ellipsis" aria-hidden="true">…</span>
-            {:else}
-              <button
-                class="page-btn {item === currentPage ? 'page-btn-active' : ''}"
-                aria-label={`ไปหน้าที่ ${item}`}
-                aria-current={item === currentPage ? "page" : undefined}
-                onclick={() => (currentPage = item)}
-              >
-                {item}
-              </button>
-            {/if}
-          {/each}
-
-          <button
-            class="page-btn"
-            aria-label="ไปหน้าถัดไป"
-            disabled={currentPage === totalPages}
-            onclick={() =>
-              (currentPage = Math.min(totalPages, currentPage + 1))}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-          </button>
-        </nav>
-      {/if}
-
-      <Dropdown
-        id="page-size"
-        label="รายการต่อหน้า:"
-        options={pageSizeOptions.map((size) => ({
-          value: String(size),
-          label: String(size),
-        }))}
-        bind:value={pageSize}
-        onchange={() => setPageSize(Number(pageSize))}
-        minWidth="80px"
-      />
-    </div>
+    <Pagination
+      bind:currentPage
+      bind:pageSize
+      totalItems={filteredProducts.length}
+      itemLabel="รายการ"
+    />
   </div>
 </div>
 
@@ -1017,79 +892,5 @@
   .btn-sm {
     padding: 4px 12px;
     font-size: 13px;
-  }
-
-  /* Pagination bar — space between info, pagination, and page size selector */
-  .pagination-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    margin-top: var(--space-lg);
-    flex-wrap: wrap;
-  }
-
-  /* Pagination */
-  .pagination {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-
-  .page-btn {
-    min-width: 36px;
-    height: 36px;
-    padding: 0 8px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--color-text-primary);
-    background-color: transparent;
-    border: 1px solid transparent;
-    transition: all 0.2s ease;
-  }
-
-  .page-btn:hover:not(:disabled) {
-    background-color: #f4f7fa;
-    border-color: var(--color-muted);
-  }
-
-  .page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .page-btn-active {
-    background-color: var(--color-primary);
-    color: var(--color-surface);
-    border-color: var(--color-primary);
-  }
-
-  .page-btn-active:hover:not(:disabled) {
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-  }
-
-  .page-ellipsis {
-    min-width: 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-primary);
-    opacity: 0.5;
-    font-size: 14px;
-  }
-
-  .pagination-info {
-    font-size: 13px;
-    color: var(--color-text-primary);
-    opacity: 0.6;
-    white-space: nowrap;
   }
 </style>
