@@ -583,6 +583,43 @@
     currentPage = 1; // reset to first page when filter changes
   }
 
+  // Export state
+  let showExportModal = $state(false);
+  let exportScope = $state('all');
+  let exportCategory = $state('');
+  let exportFormat = $state('csv');
+  let showExportConfirm = $state(false);
+
+  function openExportModal() {
+    exportScope = 'all';
+    exportCategory = '';
+    exportFormat = 'csv';
+    showExportModal = true;
+  }
+
+  function closeExportModal() {
+    showExportModal = false;
+  }
+
+  function requestExport() {
+    showExportConfirm = true;
+  }
+
+  function cancelExport() {
+    showExportConfirm = false;
+  }
+
+  function confirmExport() {
+    // TODO: Connect to backend export logic
+    console.log('Export products', {
+      scope: exportScope,
+      category: exportCategory,
+      format: exportFormat,
+    });
+    showExportConfirm = false;
+    closeExportModal();
+  }
+
   // Delete confirmation state
   let showDeleteConfirm = $state(false);
   let deleteTargetId = $state<string | null>(null);
@@ -641,7 +678,10 @@
 
 <header class="topbar">
   <h1>สินค้าคงคลัง</h1>
-  <button class="btn-primary" onclick={openAddModal}>+ เพิ่มสินค้า</button>
+  <div class="topbar-actions">
+    <button class="btn-outline" onclick={openExportModal}>ส่งออกสินค้า</button>
+    <button class="btn-primary" onclick={openAddModal}>+ เพิ่มสินค้า</button>
+  </div>
 </header>
 
 <div class="content-area">
@@ -976,6 +1016,85 @@
   </form>
 </Modal>
 
+<Modal
+  open={showExportModal}
+  title="ส่งออกรายการสินค้า"
+  onClose={closeExportModal}
+  maxWidth="480px"
+>
+  <div class="export-form">
+    <div class="form-group">
+      <label for="export-scope" class="form-label">เลือกรายการที่ส่งออก</label>
+      <Dropdown
+        id="export-scope"
+        options={[
+          { value: "all", label: "ทุกรายการ" },
+          { value: "low_stock", label: "สินค้าสต็อกต่ำ" },
+          { value: "category", label: "ตามหมวดหมู่" },
+        ]}
+        bind:value={exportScope}
+        minWidth="100%"
+      />
+    </div>
+    {#if exportScope === "category"}
+      <div class="form-group">
+        <label for="export-category" class="form-label">หมวดหมู่</label>
+        <Dropdown
+          id="export-category"
+          options={categories.map((c) => ({
+            value: c.category_id,
+            label: c.name,
+          }))}
+          bind:value={exportCategory}
+          placeholder="เลือกหมวดหมู่"
+          minWidth="100%"
+        />
+      </div>
+    {/if}
+    <div class="form-group">
+      <label for="export-format" class="form-label">รูปแบบไฟล์</label>
+      <Dropdown
+        id="export-format"
+        options={[
+          { value: "csv", label: "CSV" },
+          { value: "excel", label: "Excel" },
+          { value: "pdf", label: "PDF" },
+        ]}
+        bind:value={exportFormat}
+        minWidth="100%"
+      />
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-outline" onclick={closeExportModal}>
+        ยกเลิก
+      </button>
+      <button type="button" class="btn-primary" onclick={requestExport}>
+        ส่งออก
+      </button>
+    </div>
+  </div>
+</Modal>
+
+<ConfirmModal
+  open={showExportConfirm}
+  title="ยืนยันการส่งออกรายการสินค้า"
+  message={`ต้องการส่งออกรายการสินค้า${
+    exportScope === "all"
+      ? "ทุกรายการ"
+      : exportScope === "low_stock"
+        ? "เฉพาะสินค้าสต็อกต่ำ"
+        : `ตามหมวดหมู่ ${
+            categories.find((c) => c.category_id === exportCategory)?.name ??
+            exportCategory
+          }`
+  } ในรูปแบบ ${exportFormat.toUpperCase()} ใช่หรือไม่?`}
+  confirmText="ส่งออก"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmExport}
+  onCancel={cancelExport}
+/>
+
 <ConfirmModal
   open={showSaveConfirm}
   title="ยืนยันการบันทึกสินค้า"
@@ -1067,6 +1186,18 @@
 
   .topbar h1 {
     margin-bottom: 0;
+  }
+
+  .topbar-actions {
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+  }
+
+  .export-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
   }
 
   .content-area {

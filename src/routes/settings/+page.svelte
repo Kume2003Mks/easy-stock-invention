@@ -1,5 +1,6 @@
 <script lang="ts">
   import Dropdown from "$lib/components/Dropdown.svelte";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
 
   // Store settings state
   let storeName = $state("Easy Stock");
@@ -21,9 +22,21 @@
   // Save state
   let saved = $state(false);
 
-  function saveSettings() {
+  // Save confirmation state
+  let showSaveConfirm = $state(false);
+
+  function requestSaveSettings() {
+    showSaveConfirm = true;
+  }
+
+  function cancelSave() {
+    showSaveConfirm = false;
+  }
+
+  function confirmSaveSettings() {
     // TODO: Connect to backend later
     saved = true;
+    showSaveConfirm = false;
     setTimeout(() => {
       saved = false;
     }, 3000);
@@ -32,7 +45,7 @@
 
 <header class="topbar">
   <h1>ตั้งค่า</h1>
-  <button class="btn-primary" onclick={saveSettings}>บันทึก</button>
+  <button class="btn-primary" onclick={requestSaveSettings}>บันทึก</button>
 </header>
 
 <div class="content-area">
@@ -94,10 +107,15 @@
           minWidth="100%"
         />
       </div>
+    </div>
+
+    <!-- Notification Settings -->
+    <!-- <div class="card">
+      <h2 class="section-title">การแจ้งเตือน</h2>
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" bind:checked={lowStockAlert} />
-          แจ้งเตือนเมื่อสินค้าใกล้หมด
+          แจ้งเตือนเมื่อสต็อกใกล้หมด
         </label>
       </div>
       <div class="form-group">
@@ -106,13 +124,35 @@
           ส่งรายงานสรุปประจำวัน
         </label>
       </div>
-    </div>
+      <div class="form-group">
+        <label for="low-stock-threshold">ระดับสต็อกขั้นต่ำ</label>
+        <input
+          id="low-stock-threshold"
+          type="number"
+          min="0"
+          step="1"
+          class="input-field"
+          bind:value={lowStockThreshold}
+        />
+      </div>
+    </div> -->
   </div>
 
   {#if saved}
     <div class="save-toast">บันทึกการตั้งค่าเรียบร้อยแล้ว</div>
   {/if}
 </div>
+
+<ConfirmModal
+  open={showSaveConfirm}
+  title="ยืนยันการบันทึกการตั้งค่า"
+  message={`ต้องการบันทึกการตั้งค่า (ร้านค้า: ${storeName}, สกุลเงิน: ${currency}) ใช่หรือไม่?`}
+  confirmText="บันทึก"
+  cancelText="ยกเลิก"
+  variant="primary"
+  onConfirm={confirmSaveSettings}
+  onCancel={cancelSave}
+/>
 
 <style>
   .topbar {
