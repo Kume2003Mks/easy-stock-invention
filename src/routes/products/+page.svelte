@@ -35,6 +35,10 @@
 
   interface ProductsPageData {
     products: Product[];
+    totalItems: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
     categories: Category[];
     suppliers: Supplier[];
   }
@@ -45,6 +49,19 @@
 
   let loading = $state(true);
   let loadError = $state("");
+
+  // Pagination & Filter state
+  let currentPage = $state(1); // 1-based
+  let pageSize = $state(10); // default 10
+  let totalItems = $state(0);
+  let totalPages = $state(1);
+
+  // Search & Category filter state
+  let searchQuery = $state("");
+  let selectedCategory = $state("all");
+
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let isMounted = false;
 
   // Error modal state
   let showErrorModal = $state(false);
@@ -119,8 +136,17 @@
     loading = true;
     loadError = "";
     try {
-      const data = (await invoke("get_products_data")) as ProductsPageData;
+      const data = (await invoke("get_products_data", {
+        params: {
+          page: currentPage,
+          pageSize: pageSize,
+          search: searchQuery.trim() || null,
+          categoryId: selectedCategory === "all" ? null : selectedCategory,
+        },
+      })) as ProductsPageData;
       products = data.products ?? [];
+      totalItems = data.totalItems ?? 0;
+      totalPages = data.totalPages ?? 1;
       categories = data.categories ?? [];
       suppliers = data.suppliers ?? [];
     } catch (err) {
@@ -131,9 +157,38 @@
     }
   }
 
-  onMount(() => {
+  // Reactive effect for page and pageSize changes
+  $effect(() => {
+    const _p = currentPage;
+    const _s = pageSize;
+    if (!isMounted) return;
     loadProductsData();
   });
+
+  onMount(() => {
+    loadProductsData().then(() => {
+      isMounted = true;
+    });
+  });
+
+  function handleSearchInput() {
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      if (currentPage !== 1) {
+        currentPage = 1;
+      } else {
+        loadProductsData();
+      }
+    }, 300);
+  }
+
+  function handleCategoryChange() {
+    if (currentPage !== 1) {
+      currentPage = 1;
+    } else {
+      loadProductsData();
+    }
+  }
 
   function openAddModal() {
     // Reset form
@@ -196,11 +251,11 @@
         reorder_level: Number(newProduct.reorder_level) || 10,
       };
 
-      const saved = (await invoke("create_product", {
+      await invoke("create_product", {
         product: payload,
-      })) as Product;
+      });
 
-      products = [...products, saved];
+      await loadProductsData();
       cancelSave();
       closeAddModal();
     } catch (err) {
@@ -295,13 +350,11 @@
         reorder_level: Number(editProduct.reorder_level) || 10,
       };
 
-      const updated = (await invoke("update_product", {
+      await invoke("update_product", {
         product: payload,
-      })) as Product;
+      });
 
-      products = products.map((p) =>
-        p.product_id === updated.product_id ? updated : p,
-      );
+      await loadProductsData();
       cancelEditConfirm();
       closeEditModal();
     } catch (err) {
@@ -390,16 +443,14 @@
   async function confirmAdjustStock() {
     if (!adjustTargetProduct) return;
     try {
-      const updated = (await invoke("adjust_stock", {
+      await invoke("adjust_stock", {
         productId: adjustTargetProduct.product_id,
         transactionType: adjustType,
         quantity: Number(adjustQuantity),
         referenceNo: adjustReference.trim() || null,
-      })) as Product;
+      });
 
-      products = products.map((p) =>
-        p.product_id === updated.product_id ? updated : p,
-      );
+      await loadProductsData();
       cancelAdjustConfirm();
       closeAdjustModal();
     } catch (err) {
@@ -408,53 +459,6 @@
       showError(err, "ไม่สามารถปรับปรุงสต็อกได้");
     }
   }
-
-  // Pagination state
-  let currentPage = $state(1); // 1-based
-  let pageSize = $state(10); // default 10
-
-  // Search state
-  let searchQuery = $state("");
-
-  // Category filter state
-  let selectedCategory = $state("all");
-
-  // Filtered products based on search + category
-  let filteredProducts = $derived.by(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return products.filter((p) => {
-      // Category filter
-      if (selectedCategory !== "all") {
-        if (selectedCategory === "none") {
-          if (p.category_id) return false;
-        } else if (p.category_id !== selectedCategory) {
-          return false;
-        }
-      }
-      // Search filter
-      if (q) {
-        return (
-          p.name.toLowerCase().includes(q) ||
-          (p.barcode && p.barcode.toLowerCase().includes(q)) ||
-          (p.category_id &&
-            getCategoryName(p.category_id).toLowerCase().includes(q)) ||
-          (!p.category_id &&
-            ("ไม่มีหมวดหมู่".includes(q) ||
-              "ไม่ระบุหมวดหมู่".includes(q) ||
-              "ไม่มี".includes(q))) ||
-          (p.supplier_id &&
-            getSupplierName(p.supplier_id).toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
-  });
-
-  // Paginated slice — convert 1-based page to 0-based offset in exactly one place
-  let paginatedProducts = $derived.by(() => {
-    const offset = (currentPage - 1) * pageSize;
-    return filteredProducts.slice(offset, offset + pageSize);
-  });
 
   function getCategoryName(category_id: string | null): string {
     if (!category_id) return "-";
@@ -468,10 +472,6 @@
     return (
       suppliers.find((s) => s.supplier_id === supplier_id)?.name ?? supplier_id
     );
-  }
-
-  function setCategoryFilter() {
-    currentPage = 1; // reset to first page when filter changes
   }
 
   // Export state
@@ -531,7 +531,7 @@
     if (deleteTargetId) {
       try {
         await invoke("delete_product", { productId: deleteTargetId });
-        products = products.filter((p) => p.product_id !== deleteTargetId);
+        await loadProductsData();
       } catch (err) {
         console.error("Failed to delete product:", err);
         showError(err, "ไม่สามารถลบสินค้าได้");
@@ -557,7 +557,7 @@
         class="input-field search-input"
         placeholder="ค้นหาด้วยชื่อ, บาร์โค้ด, หมวดหมู่ หรือผู้จัดจำหน่าย..."
         bind:value={searchQuery}
-        oninput={() => (currentPage = 1)}
+        oninput={handleSearchInput}
       />
       <Dropdown
         id="category-filter"
@@ -568,7 +568,7 @@
           ...categories.map((c) => ({ value: c.category_id, label: c.name })),
         ]}
         bind:value={selectedCategory}
-        onchange={() => setCategoryFilter()}
+        onchange={handleCategoryChange}
         minWidth="150px"
       />
     </div>
@@ -606,7 +606,7 @@
               </td>
             </tr>
           {:else}
-            {#each paginatedProducts as p}
+            {#each products as p}
               <tr>
                 <td>{p.barcode || "-"}</td>
                 <td class="font-medium col-name">{p.name}</td>
@@ -661,7 +661,7 @@
     <Pagination
       bind:currentPage
       bind:pageSize
-      totalItems={filteredProducts.length}
+      {totalItems}
       itemLabel="รายการ"
     />
   </div>
