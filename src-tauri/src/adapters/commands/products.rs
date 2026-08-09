@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::adapters::persistence::product_repo;
+use crate::adapters::persistence::{product_repo, settings_repo};
 use crate::domain::entities::{Category, Product, Supplier};
 use crate::domain::error::AppError;
 
@@ -33,6 +33,7 @@ pub struct ProductsPageData {
     pub total_pages: u32,
     pub categories: Vec<Category>,
     pub suppliers: Vec<Supplier>,
+    pub currency: String,
 }
 
 #[tauri::command]
@@ -53,6 +54,8 @@ pub fn get_products_data(
     let paginated = product_repo::get_products_paginated(&conn, &filter)?;
     let categories = product_repo::get_all_categories(&conn)?;
     let suppliers = product_repo::get_all_suppliers(&conn)?;
+    let currency = settings_repo::get_setting(&conn, "currency")?
+        .unwrap_or_else(|| "THB".to_string());
 
     Ok(ProductsPageData {
         products: paginated.products,
@@ -62,6 +65,7 @@ pub fn get_products_data(
         total_pages: paginated.total_pages,
         categories,
         suppliers,
+        currency,
     })
 }
 

@@ -8,6 +8,7 @@
   import Pagination from "$lib/components/Pagination.svelte";
   import ErrorModal from "$lib/components/ErrorModal.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
+  import { getCurrencySymbol, formatCurrency } from "$lib/utils/currency";
 
   interface Product {
     product_id: string;
@@ -41,11 +42,14 @@
     totalPages: number;
     categories: Category[];
     suppliers: Supplier[];
+    currency?: string;
   }
 
   let products = $state<Product[]>([]);
   let categories = $state<Category[]>([]);
   let suppliers = $state<Supplier[]>([]);
+  let currency = $state("THB");
+  let currencySymbol = $derived(getCurrencySymbol(currency));
 
   let loading = $state(true);
   let loadError = $state("");
@@ -149,6 +153,7 @@
       totalPages = data.totalPages ?? 1;
       categories = data.categories ?? [];
       suppliers = data.suppliers ?? [];
+      currency = data.currency ?? "THB";
     } catch (err) {
       console.error("Failed to load products data:", err);
       loadError = String(err);
@@ -544,7 +549,7 @@
 <header class="topbar">
   <h1>สินค้าคงคลัง</h1>
   <div class="topbar-actions">
-    <button class="btn-outline" onclick={openExportModal}>ส่งออกสินค้า</button>
+    <!-- <button class="btn-outline" onclick={openExportModal}>ส่งออกสินค้า</button> -->
     <button class="btn-primary" onclick={openAddModal}>+ เพิ่มสินค้า</button>
   </div>
 </header>
@@ -612,9 +617,9 @@
                 <td class="font-medium col-name">{p.name}</td>
                 <td>{getCategoryName(p.category_id)}</td>
                 <td>{getSupplierName(p.supplier_id)}</td>
-                <td>฿{p.cost_price.toFixed(2)}</td>
-                <td>฿{p.selling_price.toFixed(2)}</td>
-                <td>฿{p.wholesale_price.toFixed(2)}</td>
+                <td>{formatCurrency(p.cost_price, currency)}</td>
+                <td>{formatCurrency(p.selling_price, currency)}</td>
+                <td>{formatCurrency(p.wholesale_price, currency)}</td>
                 <td>
                   <span
                     class="badge {p.current_stock > p.reorder_level
@@ -748,7 +753,9 @@
       </div>
 
       <div class="form-group">
-        <label for="product-cost" class="form-label">ต้นทุน (บาท)</label>
+        <label for="product-cost" class="form-label"
+          >ต้นทุน ({currencySymbol})</label
+        >
         <input
           id="product-cost"
           type="number"
@@ -761,7 +768,9 @@
       </div>
 
       <div class="form-group">
-        <label for="product-selling" class="form-label">ราคาขาย (บาท)</label>
+        <label for="product-selling" class="form-label"
+          >ราคาขาย ({currencySymbol})</label
+        >
         <input
           id="product-selling"
           type="number"
@@ -774,7 +783,9 @@
       </div>
 
       <div class="form-group">
-        <label for="product-wholesale" class="form-label">ราคาส่ง (บาท)</label>
+        <label for="product-wholesale" class="form-label"
+          >ราคาส่ง ({currencySymbol})</label
+        >
         <input
           id="product-wholesale"
           type="number"
@@ -1010,7 +1021,9 @@
       </div>
 
       <div class="form-group">
-        <label for="edit-product-cost" class="form-label">ต้นทุน (บาท)</label>
+        <label for="edit-product-cost" class="form-label"
+          >ต้นทุน ({currencySymbol})</label
+        >
         <input
           id="edit-product-cost"
           type="number"
@@ -1024,7 +1037,7 @@
 
       <div class="form-group">
         <label for="edit-product-selling" class="form-label"
-          >ราคาขาย (บาท)</label
+          >ราคาขาย ({currencySymbol})</label
         >
         <input
           id="edit-product-selling"
@@ -1039,7 +1052,7 @@
 
       <div class="form-group">
         <label for="edit-product-wholesale" class="form-label"
-          >ราคาส่ง (บาท)</label
+          >ราคาส่ง ({currencySymbol})</label
         >
         <input
           id="edit-product-wholesale"
