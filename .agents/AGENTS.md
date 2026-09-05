@@ -24,4 +24,6 @@ This file serves as a guide and library for the various skills available to the 
 
 # Global Workspace Rules
 
-- **Design Guidelines:** Please refer to the [Design Document](DESIGN.md) located in this directory (`d:\Project\hikariel\.agents\DESIGN.md`) for all UI/UX rules, color palettes, typography, and component constraints.
+- **Design Guidelines:** Please refer to the [Design Document](DESIGN.md) located at `.agents/DESIGN.md` for all UI/UX rules, color palettes, typography, and component constraints.
+- **Role-Based Access Control (RBAC):** Please refer to [RBAC Architecture](rules/rbac.md) for data models, role/permission matrices, and Clean Architecture enforcement across adapters, use cases, and audit logs.
+- **Thermal Receipt & Auto-Print (Native ESC/POS):** Please refer to [Thermal Receipt Architecture](rules/thermal_printer.md) for hardware-level control, paper size layouts (80/58/57mm), universal raster QR code rendering, Clean Architecture layers, and non-blocking IPC standards.

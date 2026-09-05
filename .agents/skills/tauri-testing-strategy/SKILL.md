@@ -42,7 +42,7 @@ This tests the actual SQLite connections via the `rusqlite` library to verify SQ
     *   **Test Case 2 (Rollback):** Intentionally fail the command mid-way (e.g., adding a non-existent item) and assert that no data is saved in the main or log tables (100% Rollback), effectively preventing data corruption.
 *   **Asynchronous & Offline-First:**
     *   Use the `#[tokio::test]` macro to start an async runtime for testing the sync queue.
-    *   **Change Tracking:** Upon modifying data, the system must automatically adjust the `sync_status` column in the activity table to `PENDING`.
+    *   **Change Tracking:** Upon modifying data, the system must automatically record an entry into the `sync_queue` table with a `sync_status` of `PENDING`.
     *   **Conflict Resolution:** Simulate network recovery. Rust must compare the `updated_at` field (Timestamp-based Resolution) and retain the latest data to prevent overwriting new data with old data.
 
 ## 🌐 2. Frontend Testing (Svelte + TS)

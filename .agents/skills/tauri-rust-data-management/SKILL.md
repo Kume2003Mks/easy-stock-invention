@@ -32,12 +32,12 @@ Managing the database on the backend with Rust is an excellent choice for a syst
 
 ## 4. Error Handling Architecture
 
-* The best practice for error handling is returning Error Codes or short English messages from the Backend.
-* The Frontend will be responsible for catching these messages and converting them into a user-friendly UI or translating them into the user's local language.
-* In Rust, `enum` can be used to clearly define and organize these Error Code sets.
-* Integrate with `serde::Serialize` to allow Tauri's system to convert Error Codes back into JSON format and return them to the Frontend.
-* The Frontend can write functions to check and switch to user-friendly alert messages.
-* This method hides complexity or deep errors (like `UNIQUE constraint failed`) from startling users, while developers can easily debug the code.
+* The best practice for error handling is returning standardized machine-readable Error Codes (e.g., `ERR_UNAUTHORIZED`, `ERR_PRINTER_OFFLINE`, `ERR_UNIQUE_CONSTRAINT`) from the Backend.
+* Avoid returning raw arbitrary English messages or direct database error strings.
+* In Rust, an `enum` can be used to clearly define and organize these Error Code sets.
+* Integrate with `serde::Serialize` to allow Tauri's system to convert Error Codes into a structured JSON format (e.g., `{ "code": "ERR_..." }`) and return them to the Frontend.
+* The Frontend is responsible for intercepting these error codes and translating them into user-friendly localized UI alerts.
+* This method hides internal implementation details from end users while providing reliable error discrimination for both frontend logic and developer debugging.
 
 ## 5. Offline-First and Cloud Sync Architecture
 
@@ -47,6 +47,6 @@ To ensure the POS system runs smoothly even without internet and can back up dat
 | :--- | :--- |
 | **Local as Source of Truth** | Always read and write all data to the local SQLite first to ensure storefront sales speed isn't delayed by internet speed. |
 | **UUID v7** | Enforce UUID v7 as the Primary Key in all tables to prevent ID collision when syncing data from multiple POS branches to a central Cloud Database. |
-| **Sync Queue / Change Tracking** | Create a `sync_queue` table or add a `sync_status` column (e.g., `PENDING`, `SYNCED`, `FAILED`) to the `activity_logs` table to indicate which data sets haven't been uploaded to the Cloud. |
-| **Background Worker in Rust** | Use an Async Runtime like `tokio` to run a Background Task on the Rust side, separate from the main UI, to continuously poll `PENDING` data, send it to the Cloud API (via libraries like `reqwest`), and update the status to `SYNCED` upon success. |
+| **Sync Queue / Change Tracking** | Use a dedicated `sync_queue` table (`id`, `entity_type`, `entity_id`, `action`, `payload`, `sync_status`, `created_at`) to track records waiting for upload (`PENDING`, `SYNCED`, `FAILED`). Keep this decoupled from `activity_logs` which serves exclusively as an immutable RBAC Audit Trail. |
+| **Background Worker in Rust** | Use an Async Runtime like `tokio` to run a Background Task on the Rust side, separate from the main UI, to continuously poll `PENDING` data from `sync_queue`, send it to the Cloud API (via libraries like `reqwest`), and update the status to `SYNCED` upon success. |
 | **Conflict Resolution** | If fetching updated data from the Cloud to the Local machine, use the `updated_at` field for Timestamp-based Resolution to verify which data is newer, preventing overwriting of the most recently modified data. |
