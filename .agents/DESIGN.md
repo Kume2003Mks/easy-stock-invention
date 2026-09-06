@@ -29,10 +29,20 @@
 - **Shadows:** Emphasize the use of a 1px border in `#D8DEE9` instead of shadows (Zero Shadows) to maintain a clean appearance.
 - **Padding:** 24px - 32px (Generous whitespace)
 
+### Modal & Dialog Guidelines (Strict Rule)
+
+* **Zero Browser Native Popups:** Strictly forbid using browser native `alert()`, `confirm()`, and `prompt()`. Native dialogs look crude, show browser headers (e.g. `localhost:1420 says`), block the JavaScript thread, and violate the Nordic Breeze aesthetic.
+* **Always Use Dedicated Svelte Modal Components:**
+  * **Alerts & Error Notifications:** Use `ErrorModal.svelte` or inline status banners.
+  * **User Confirmations:** Use `ConfirmModal.svelte` (with clear primary or danger action buttons).
+  * **User Input Prompts:** Use `PromptModal.svelte` (for text input like order notes, table numbers, or quick values).
+  * **Custom Views & Forms:** Use `Modal.svelte` with custom content.
+
 ### Don't
 
 Avoid common design patterns frequently seen in AI-generated websites, such as:
 
+* Using browser native dialogs (`window.alert()`, `window.confirm()`, `window.prompt()`) - ALWAYS use Svelte Modals
 * Full-screen purple, blue, or pink gradients
 * Excessive glassmorphism
 * Card components with identical border radius across all sections
@@ -50,3 +60,4 @@ Avoid common design patterns frequently seen in AI-generated websites, such as:
 * Adding elements just to fill space without a clear purpose
 
 ---
+
