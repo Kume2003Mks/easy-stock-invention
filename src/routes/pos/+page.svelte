@@ -117,9 +117,11 @@
   });
 
   const cartSubtotal = $derived(
-    cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
+    Math.round(cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) * 100) / 100
   );
-  const cartTotal = $derived(Math.max(0, cartSubtotal - discountAmount));
+  const cartTotal = $derived(
+    Math.round(Math.max(0, cartSubtotal - discountAmount) * 100) / 100
+  );
 
   function formatMoney(n: number): string {
     return n.toLocaleString('th-TH', { minimumFractionDigits: 2 });

@@ -1,11 +1,18 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { beforeNavigate, goto } from "$app/navigation";
   import Dropdown from "$lib/components/Dropdown.svelte";
-  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Modal from "$lib/components/Modal.svelte";
   import ErrorModal from "$lib/components/ErrorModal.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
   import type { AppSettings, SystemPrintersResponse } from "$lib/types";
+
+  type SettingCategory = "store" | "printer" | "stock" | "system";
+
+  // Navigation state: null = Category Hub (main list), string = Subpage view
+  let activeCategory = $state<SettingCategory | null>(null);
+
   // Store settings state
   let storeName = $state("Easy Stock");
   let storeAddress = $state("");
@@ -45,10 +52,11 @@
   let printerCodepage = $state("26");
   let receiptFont = $state("sarabun");
   let testingPrint = $state(false);
+  let saving = $state(false);
 
   const receiptFontOptions = [
-    { value: "sarabun", label: "ฟอนต์ Sarabun (ค่าเริ่มต้น)" },
-    { value: "device", label: "ฟอนต์เครื่องพิมพ์ (โหมดข้อความ)" },
+    { value: "sarabun", label: "ฟอนต์ Sarabun (ค่าเริ่มต้น - คมชัดสูง)" },
+    { value: "device", label: "ฟอนต์เครื่องพิมพ์ (โหมดข้อความฮาร์ดแวร์)" },
   ];
 
   const codepageOptions = [
@@ -159,17 +167,200 @@
 
   function validateForm(): boolean {
     const errors: Record<string, string> = {};
-
     if (!storeName.trim()) {
-      errors.store_name = "กรุณากรอกชื่อร้าน";
+      errors.store_name = "กรุณากรอกชื่อร้านค้า";
     }
-
     formErrors = errors;
     return Object.keys(errors).length === 0;
   }
 
-  // Save confirmation state
-  let showSaveConfirm = $state(false);
+  // Saved Snapshot for Dirty State Tracking
+  type SavedSnapshot = {
+    storeName: string;
+    storeAddress: string;
+    storePhone: string;
+    storeEmail: string;
+    currency: string;
+    allowOutOfStockSale: boolean;
+    lowStockThreshold: number;
+    lowStockAlert: boolean;
+    dailyReport: boolean;
+    autoPrintEnabled: boolean;
+    receiptPreviewEnabled: boolean;
+    paperSize: string;
+    printerConnection: string;
+    printerTarget: string;
+    selectedUsbPrinter: string;
+    isManualUsb: boolean;
+    promptpayId: string;
+    promptpayQrEnabled: boolean;
+    printerCodepage: string;
+    receiptFont: string;
+  };
+
+  let savedSnapshot = $state<SavedSnapshot | null>(null);
+
+  function takeSnapshot(): SavedSnapshot {
+    return {
+      storeName,
+      storeAddress,
+      storePhone,
+      storeEmail,
+      currency,
+      allowOutOfStockSale,
+      lowStockThreshold,
+      lowStockAlert,
+      dailyReport,
+      autoPrintEnabled,
+      receiptPreviewEnabled,
+      paperSize,
+      printerConnection,
+      printerTarget,
+      selectedUsbPrinter,
+      isManualUsb,
+      promptpayId,
+      promptpayQrEnabled,
+      printerCodepage,
+      receiptFont,
+    };
+  }
+
+  function isCategoryDirty(cat: SettingCategory): boolean {
+    if (!savedSnapshot) return false;
+    if (cat === "store") {
+      return (
+        storeName !== savedSnapshot.storeName ||
+        storeAddress !== savedSnapshot.storeAddress ||
+        storePhone !== savedSnapshot.storePhone ||
+        storeEmail !== savedSnapshot.storeEmail
+      );
+    }
+    if (cat === "printer") {
+      return (
+        autoPrintEnabled !== savedSnapshot.autoPrintEnabled ||
+        receiptPreviewEnabled !== savedSnapshot.receiptPreviewEnabled ||
+        paperSize !== savedSnapshot.paperSize ||
+        printerConnection !== savedSnapshot.printerConnection ||
+        printerTarget !== savedSnapshot.printerTarget ||
+        selectedUsbPrinter !== savedSnapshot.selectedUsbPrinter ||
+        isManualUsb !== savedSnapshot.isManualUsb ||
+        promptpayId !== savedSnapshot.promptpayId ||
+        promptpayQrEnabled !== savedSnapshot.promptpayQrEnabled ||
+        printerCodepage !== savedSnapshot.printerCodepage ||
+        receiptFont !== savedSnapshot.receiptFont
+      );
+    }
+    if (cat === "stock") {
+      return (
+        allowOutOfStockSale !== savedSnapshot.allowOutOfStockSale ||
+        lowStockAlert !== savedSnapshot.lowStockAlert ||
+        Number(lowStockThreshold) !== Number(savedSnapshot.lowStockThreshold)
+      );
+    }
+    if (cat === "system") {
+      return currency !== savedSnapshot.currency;
+    }
+    return false;
+  }
+
+  function revertCategory(cat: SettingCategory) {
+    if (!savedSnapshot) return;
+    if (cat === "store") {
+      storeName = savedSnapshot.storeName;
+      storeAddress = savedSnapshot.storeAddress;
+      storePhone = savedSnapshot.storePhone;
+      storeEmail = savedSnapshot.storeEmail;
+      clearFieldError("store_name");
+    } else if (cat === "printer") {
+      autoPrintEnabled = savedSnapshot.autoPrintEnabled;
+      receiptPreviewEnabled = savedSnapshot.receiptPreviewEnabled;
+      paperSize = savedSnapshot.paperSize;
+      printerConnection = savedSnapshot.printerConnection;
+      printerTarget = savedSnapshot.printerTarget;
+      selectedUsbPrinter = savedSnapshot.selectedUsbPrinter;
+      isManualUsb = savedSnapshot.isManualUsb;
+      promptpayId = savedSnapshot.promptpayId;
+      promptpayQrEnabled = savedSnapshot.promptpayQrEnabled;
+      printerCodepage = savedSnapshot.printerCodepage;
+      receiptFont = savedSnapshot.receiptFont;
+      syncUsbSelection();
+    } else if (cat === "stock") {
+      allowOutOfStockSale = savedSnapshot.allowOutOfStockSale;
+      lowStockAlert = savedSnapshot.lowStockAlert;
+      lowStockThreshold = savedSnapshot.lowStockThreshold;
+    } else if (cat === "system") {
+      currency = savedSnapshot.currency;
+    }
+  }
+
+  // Unsaved Changes Confirmation Modal State
+  let unsavedModal = $state<{
+    open: boolean;
+    targetCategory: SettingCategory | null;
+    targetUrl: string | null;
+  }>({
+    open: false,
+    targetCategory: null,
+    targetUrl: null,
+  });
+
+  function navigateToCategory(target: SettingCategory | null) {
+    if (
+      activeCategory &&
+      activeCategory !== target &&
+      isCategoryDirty(activeCategory)
+    ) {
+      unsavedModal = {
+        open: true,
+        targetCategory: target,
+        targetUrl: null,
+      };
+      return;
+    }
+    activeCategory = target;
+  }
+
+  beforeNavigate(({ cancel, to }) => {
+    if (activeCategory && isCategoryDirty(activeCategory)) {
+      cancel();
+      unsavedModal = {
+        open: true,
+        targetCategory: null,
+        targetUrl: to?.url?.href || null,
+      };
+    }
+  });
+
+  async function handleDiscardAndLeave() {
+    if (activeCategory) {
+      revertCategory(activeCategory);
+    }
+    const { targetCategory, targetUrl } = unsavedModal;
+    unsavedModal = { open: false, targetCategory: null, targetUrl: null };
+    if (targetUrl) {
+      await goto(targetUrl);
+    } else {
+      activeCategory = targetCategory;
+    }
+  }
+
+  async function handleSaveAndLeave() {
+    if (!activeCategory) return;
+    const success = await saveCategory(activeCategory);
+    if (success) {
+      const { targetCategory, targetUrl } = unsavedModal;
+      unsavedModal = { open: false, targetCategory: null, targetUrl: null };
+      if (targetUrl) {
+        await goto(targetUrl);
+      } else {
+        activeCategory = targetCategory;
+      }
+    }
+  }
+
+  function handleCancelUnsavedModal() {
+    unsavedModal = { open: false, targetCategory: null, targetUrl: null };
+  }
 
   onMount(async () => {
     try {
@@ -177,11 +368,11 @@
 
       const result = (await invoke("get_settings")) as AppSettings;
 
-      storeName = result.store_name;
-      storeAddress = result.store_address;
-      storePhone = result.store_phone;
-      storeEmail = result.store_email;
-      currency = result.currency;
+      storeName = result.store_name || "Easy Stock";
+      storeAddress = result.store_address || "";
+      storePhone = result.store_phone || "";
+      storeEmail = result.store_email || "";
+      currency = result.currency || "THB";
       lowStockThreshold = Number(result.low_stock_threshold) || 10;
       lowStockAlert = result.low_stock_alert === "true";
       dailyReport = result.daily_report === "true";
@@ -199,6 +390,7 @@
       receiptFont = result.receipt_font || "sarabun";
 
       syncUsbSelection();
+      savedSnapshot = takeSnapshot();
     } catch (e) {
       loadError = String(e);
     } finally {
@@ -206,18 +398,13 @@
     }
   });
 
-  function requestSaveSettings() {
-    if (!validateForm()) return;
-    showSaveConfirm = true;
-  }
+  async function saveCategory(cat: SettingCategory): Promise<boolean> {
+    if (cat === "store") {
+      if (!validateForm()) return false;
+    }
 
-  function cancelSave() {
-    showSaveConfirm = false;
-  }
-
-  async function confirmSaveSettings() {
+    saving = true;
     try {
-      showSaveConfirm = false;
       const targetToSave =
         printerConnection === "usb"
           ? isManualUsb
@@ -251,9 +438,23 @@
           receipt_font: receiptFont,
         },
       });
-      showToast("บันทึกการตั้งค่าเรียบร้อยแล้ว");
+
+      savedSnapshot = takeSnapshot();
+
+      const messages: Record<SettingCategory, string> = {
+        store: "บันทึกข้อมูลร้านค้าเรียบร้อยแล้ว",
+        printer: "บันทึกการตั้งค่าเครื่องพิมพ์เรียบร้อยแล้ว",
+        stock: "บันทึกการตั้งค่าสต็อกและการขายเรียบร้อยแล้ว",
+        system: "บันทึกการตั้งค่าระบบเรียบร้อยแล้ว",
+      };
+
+      showToast(messages[cat]);
+      return true;
     } catch (e) {
       loadError = String(e);
+      return false;
+    } finally {
+      saving = false;
     }
   }
 
@@ -324,337 +525,970 @@
       testingPrint = false;
     }
   }
+
+  const categoryTitles: Record<
+    SettingCategory,
+    { title: string; subtitle: string }
+  > = {
+    store: {
+      title: "ข้อมูลร้านค้า",
+      subtitle:
+        "ชื่อร้านค้า, ที่อยู่, เบอร์โทรศัพท์, อีเมลสำหรับติดต่อและออกใบเสร็จ",
+    },
+    printer: {
+      title: "เครื่องพิมพ์ใบเสร็จ",
+      subtitle:
+        "การเชื่อมต่อ USB / เครือข่าย, ขนาดกระดาษ, ฟอนต์ Sarabun, รหัสภาษาไทย, พร้อมเพย์ QR",
+    },
+    stock: {
+      title: "สต็อกและการขาย",
+      subtitle:
+        "ระดับสต็อกขั้นต่ำ, การแจ้งเตือนสต็อกต่ำ, อนุญาตให้ขายสินค้าเมื่อหมดสต็อก",
+    },
+    system: {
+      title: "การตั้งค่าระบบ",
+      subtitle: "สกุลเงินที่ใช้ในระบบและการตั้งค่าพื้นฐาน",
+    },
+  };
 </script>
 
-<header class="topbar">
-  <h1>ตั้งค่า</h1>
-  <button class="btn-primary" onclick={requestSaveSettings} disabled={loading}>
-    บันทึก
-  </button>
-</header>
-
-<div class="content-area">
+<div class="settings-container">
   {#if loading}
-    <div class="loading-state">กำลังโหลดการตั้งค่า...</div>
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>กำลังโหลดข้อมูลการตั้งค่า...</p>
+    </div>
   {:else if loadError}
-    <div class="error-state">เกิดข้อผิดพลาด: {loadError}</div>
+    <div class="error-state">
+      <p>เกิดข้อผิดพลาด: {loadError}</p>
+    </div>
   {:else}
-    <div class="settings-grid">
-      <!-- Store Information -->
-      <div class="card">
-        <h2 class="section-title">ข้อมูลร้านค้า</h2>
-        <div class="form-group">
-          <label for="store-name" class:label-error={!!formErrors.store_name}>
-            ชื่อร้าน *
-          </label>
-          <input
-            id="store-name"
-            type="text"
-            class="input-field"
-            class:input-error={!!formErrors.store_name}
-            bind:value={storeName}
-            placeholder="ชื่อร้านค้า"
-            oninput={() => clearFieldError("store_name")}
-          />
-          {#if formErrors.store_name}
-            <span class="error-text">{formErrors.store_name}</span>
-          {/if}
+    <!-- VIEW 1: CATEGORY HUB (Main Windows 11 style list) -->
+    {#if activeCategory === null}
+      <header class="hub-header">
+        <div class="hub-title-group">
+          <h1>ตั้งค่า</h1>
+          <p class="hub-subtitle">
+            จัดการข้อมูลร้านค้า เครื่องพิมพ์ใบเสร็จ สต็อกสินค้า และระบบ
+          </p>
         </div>
-        <div class="form-group">
-          <label for="store-address">ที่อยู่</label>
-          <textarea
-            id="store-address"
-            class="input-field"
-            bind:value={storeAddress}
-            placeholder="ที่อยู่ร้านค้า"
-            rows="3"
-          ></textarea>
+      </header>
+
+      <!-- Store Overview Hero Banner -->
+      <div class="store-hero-card">
+        <div class="store-hero-icon">
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
         </div>
-        <div class="form-group">
-          <label for="store-phone">เบอร์โทรศัพท์</label>
-          <input
-            id="store-phone"
-            type="tel"
-            class="input-field"
-            bind:value={storePhone}
-            placeholder="เบอร์โทรศัพท์"
-          />
-        </div>
-        <div class="form-group">
-          <label for="store-email">อีเมล</label>
-          <input
-            id="store-email"
-            type="email"
-            class="input-field"
-            bind:value={storeEmail}
-            placeholder="อีเมลติดต่อ"
-          />
+        <div class="store-hero-info">
+          <h2 class="store-hero-name">{storeName || "Easy Stock"}</h2>
+          <div class="store-hero-badges">
+            <span class="badge">
+              <span class="badge-dot"></span>
+              {printerConnection === "none"
+                ? "โหมดไม่ระบุเครื่องพิมพ์"
+                : printerConnection === "usb"
+                  ? `เครื่องพิมพ์ USB (${paperSize} มม.)`
+                  : `เครื่องพิมพ์เครือข่าย (${paperSize} มม.)`}
+            </span>
+            <span class="badge badge-secondary">
+              สกุลเงิน: {currency}
+            </span>
+            {#if allowOutOfStockSale}
+              <span class="badge badge-accent">อนุญาตขายสินค้าหมด</span>
+            {/if}
+          </div>
         </div>
       </div>
 
-      <!-- Printer Settings -->
-      <div class="card">
-        <h2 class="section-title">เครื่องพิมพ์ใบเสร็จ</h2>
-
-        {#if printerConnection === "none"}
-          <div class="printer-none-notice">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <div>
-              <strong>โหมดไม่ระบุเครื่องพิมพ์</strong>
-              <p>
-                สำหรับร้านค้าที่ไม่มีเครื่องพิมพ์ หรือยังไม่ต้องการพิมพ์ใบเสร็จ
-                ระบบจะปิดการพิมพ์อัตโนมัติ โดยยังสามารถดูตัวอย่างใบเสร็จบนหน้าจอ
-                POS ได้ตามปกติ
-              </p>
-            </div>
-          </div>
-        {/if}
-
-        <div class="checkbox-group">
-          <label
-            class="checkbox-label"
-            class:disabled-label={printerConnection === "none"}
+      <!-- Categories List (Matching Attached Design) -->
+      <div class="category-list-section">
+        <div class="category-list">
+          <!-- 1. Store Profile -->
+          <button
+            type="button"
+            class="category-item-card"
+            onclick={() => navigateToCategory("store")}
           >
-            <input
-              type="checkbox"
-              bind:checked={autoPrintEnabled}
-              disabled={printerConnection === "none"}
-            />
-            <span>พิมพ์ใบเสร็จอัตโนมัติหลังชำระเงิน</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" bind:checked={receiptPreviewEnabled} />
-            <span>แสดงตัวอย่างใบเสร็จก่อนพิมพ์</span>
-          </label>
+            <div class="category-icon-box">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+            </div>
+            <div class="category-text-block">
+              <span class="category-title">ข้อมูลร้านค้า</span>
+              <span class="category-desc"
+                >ชื่อร้าน, ที่อยู่, เบอร์โทรศัพท์,
+                อีเมลสำหรับติดต่อและออกใบเสร็จ</span
+              >
+            </div>
+            {#if isCategoryDirty("store")}
+              <span class="dirty-indicator" title="มีการแก้ไขที่ยังไม่บันทึก"
+                >• แก้ไขแล้ว</span
+              >
+            {/if}
+            <div class="category-chevron">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </button>
+
+          <!-- 2. Receipt Printer -->
+          <button
+            type="button"
+            class="category-item-card"
+            onclick={() => navigateToCategory("printer")}
+          >
+            <div class="category-icon-box">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="6 9 6 2 18 2 18 9" />
+                <path
+                  d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+                />
+                <rect x="6" y="14" width="12" height="8" />
+              </svg>
+            </div>
+            <div class="category-text-block">
+              <span class="category-title">เครื่องพิมพ์ใบเสร็จ</span>
+              <span class="category-desc"
+                >การเชื่อมต่อ USB/เครือข่าย, ขนาดกระดาษ, ฟอนต์ Sarabun,
+                รหัสภาษาไทย, พร้อมเพย์ QR</span
+              >
+            </div>
+            {#if isCategoryDirty("printer")}
+              <span class="dirty-indicator" title="มีการแก้ไขที่ยังไม่บันทึก"
+                >• แก้ไขแล้ว</span
+              >
+            {/if}
+            <div class="category-chevron">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </button>
+
+          <!-- 3. Stock & Sales -->
+          <button
+            type="button"
+            class="category-item-card"
+            onclick={() => navigateToCategory("stock")}
+          >
+            <div class="category-icon-box">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"
+                />
+                <path d="m3.3 7 8.7 5 8.7-5" />
+                <path d="M12 22V12" />
+              </svg>
+            </div>
+            <div class="category-text-block">
+              <span class="category-title">สต็อกและการขาย</span>
+              <span class="category-desc"
+                >ระดับสต็อกขั้นต่ำ, การแจ้งเตือนสต็อกต่ำ,
+                อนุญาตให้ขายสินค้าเมื่อหมดสต็อก</span
+              >
+            </div>
+            {#if isCategoryDirty("stock")}
+              <span class="dirty-indicator" title="มีการแก้ไขที่ยังไม่บันทึก"
+                >• แก้ไขแล้ว</span
+              >
+            {/if}
+            <div class="category-chevron">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </button>
+
+          <!-- 4. System Settings -->
+          <button
+            type="button"
+            class="category-item-card"
+            onclick={() => navigateToCategory("system")}
+          >
+            <div class="category-icon-box">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                />
+              </svg>
+            </div>
+            <div class="category-text-block">
+              <span class="category-title">การตั้งค่าระบบ</span>
+              <span class="category-desc"
+                >สกุลเงินที่ใช้ในระบบ ({currency}) และการตั้งค่าพื้นฐาน</span
+              >
+            </div>
+            {#if isCategoryDirty("system")}
+              <span class="dirty-indicator" title="มีการแก้ไขที่ยังไม่บันทึก"
+                >• แก้ไขแล้ว</span
+              >
+            {/if}
+            <div class="category-chevron">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- VIEW 2: DRILL-DOWN SUBPAGE (Per-category Settings) -->
+    {:else}
+      <div class="subpage-view">
+        <!-- Subpage Top Bar & Breadcrumb -->
+        <div class="subpage-header">
+          <div class="breadcrumb-nav">
+            <button
+              type="button"
+              class="btn-back"
+              onclick={() => navigateToCategory(null)}
+              title="กลับสู่หน้ารวมหมวดหมู่"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              <span>ตั้งค่า</span>
+            </button>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current"
+              >{categoryTitles[activeCategory].title}</span
+            >
+            {#if isCategoryDirty(activeCategory)}
+              <span class="dirty-pill">ยังไม่บันทึก</span>
+            {/if}
+          </div>
         </div>
 
-        <div class="form-group">
-          <Dropdown
-            id="printer-connection"
-            label="ประเภทการเชื่อมต่อ"
-            options={printerConnectionOptions}
-            bind:value={printerConnection}
-            onchange={handleConnectionChange}
-            minWidth="100%"
-          />
+        <!-- Quick Switcher Tabs -->
+        <div class="category-tabs-bar">
+          <button
+            type="button"
+            class="tab-pill"
+            class:active={activeCategory === "store"}
+            onclick={() => navigateToCategory("store")}
+          >
+            ข้อมูลร้านค้า
+            {#if isCategoryDirty("store")}<span class="tab-dot"></span>{/if}
+          </button>
+          <button
+            type="button"
+            class="tab-pill"
+            class:active={activeCategory === "printer"}
+            onclick={() => navigateToCategory("printer")}
+          >
+            เครื่องพิมพ์ใบเสร็จ
+            {#if isCategoryDirty("printer")}<span class="tab-dot"></span>{/if}
+          </button>
+          <button
+            type="button"
+            class="tab-pill"
+            class:active={activeCategory === "stock"}
+            onclick={() => navigateToCategory("stock")}
+          >
+            สต็อกและการขาย
+            {#if isCategoryDirty("stock")}<span class="tab-dot"></span>{/if}
+          </button>
+          <button
+            type="button"
+            class="tab-pill"
+            class:active={activeCategory === "system"}
+            onclick={() => navigateToCategory("system")}
+          >
+            การตั้งค่าระบบ
+            {#if isCategoryDirty("system")}<span class="tab-dot"></span>{/if}
+          </button>
         </div>
 
-        {#if printerConnection === "usb"}
-          <div class="form-group">
-            <div class="label-with-action">
-              <label for="usb-printer-select"
-                >เลือกเครื่องพิมพ์ที่ติดตั้งในเครื่อง</label
-              >
-              <button
-                type="button"
-                class="btn-text-action"
-                onclick={loadSystemPrinters}
-                disabled={loadingPrinters}
-                title="ค้นหาเครื่องพิมพ์ที่เชื่อมต่อใหม่"
-              >
+        <!-- Subpage Content Container -->
+        <div class="subpage-content">
+          <!-- SUBPAGE 1: STORE PROFILE -->
+          {#if activeCategory === "store"}
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>ข้อมูลร้านค้าพื้นฐาน</h3>
+                  <p>
+                    ข้อมูลเหล่านี้จะถูกแสดงบนหัวใบเสร็จรับเงิน
+                    และข้อมูลติดต่อของร้าน
+                  </p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <label
+                      for="store-name"
+                      class:label-error={!!formErrors.store_name}
+                    >
+                      ชื่อร้านค้า *
+                    </label>
+                    <span class="fluent-row-desc"
+                      >ชื่อหลักที่จะพิมพ์บนใบเสร็จและหน้าจอ POS</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <input
+                      id="store-name"
+                      type="text"
+                      class="input-field input-modern"
+                      class:input-error={!!formErrors.store_name}
+                      bind:value={storeName}
+                      placeholder="เช่น Easy Stock"
+                      oninput={() => clearFieldError("store_name")}
+                    />
+                    {#if formErrors.store_name}
+                      <span class="error-text">{formErrors.store_name}</span>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <label for="store-address">ที่อยู่ร้านค้า</label>
+                    <span class="fluent-row-desc"
+                      >ที่ตั้งร้านค้า สาขา หรือรายละเอียดที่ต้องการระบุบนใบเสร็จ</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <textarea
+                      id="store-address"
+                      class="input-field input-modern"
+                      bind:value={storeAddress}
+                      placeholder="เช่น 123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพฯ 10110"
+                      rows="3"
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <label for="store-phone">เบอร์โทรศัพท์ติดต่อ</label>
+                    <span class="fluent-row-desc"
+                      >เบอร์โทรศัพท์สำหรับลูกค้าสอบถามข้อมูล</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <input
+                      id="store-phone"
+                      type="tel"
+                      class="input-field input-modern"
+                      bind:value={storePhone}
+                      placeholder="เช่น 02-123-4567 หรือ 081-234-5678"
+                    />
+                  </div>
+                </div>
+
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <label for="store-email">อีเมลติดต่อ</label>
+                    <span class="fluent-row-desc"
+                      >อีเมลสำหรับติดต่อธุรกิจหรือส่งใบเสร็จดิจิทัล</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <input
+                      id="store-email"
+                      type="email"
+                      class="input-field input-modern"
+                      bind:value={storeEmail}
+                      placeholder="เช่น contact@easystock.com"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SUBPAGE 2: RECEIPT PRINTER -->
+          {:else if activeCategory === "printer"}
+            {#if printerConnection === "none"}
+              <div class="printer-none-notice">
                 <svg
-                  width="13"
-                  height="13"
+                  width="20"
+                  height="20"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  stroke-width="2.2"
+                  stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  class:spin={loadingPrinters}
                 >
-                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                  <polyline points="21 3 21 8 16 8" />
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <span>{loadingPrinters ? "กำลังค้นหา..." : "ค้นหาใหม่"}</span>
-              </button>
-            </div>
-            <Dropdown
-              id="usb-printer-select"
-              label=""
-              options={usbPrinterOptions}
-              bind:value={selectedUsbPrinter}
-              onchange={handleUsbPrinterChange}
-              minWidth="100%"
-            />
-          </div>
+                <div>
+                  <strong>โหมดไม่ระบุเครื่องพิมพ์</strong>
+                  <p>
+                    ระบบปิดการพิมพ์อัตโนมัติ
+                    โดยยังสามารถดูตัวอย่างใบเสร็จบนหน้าจอ POS ได้ตามปกติ
+                  </p>
+                </div>
+              </div>
+            {/if}
 
-          {#if isManualUsb}
-            <div class="form-group">
-              <label for="printer-target"
-                >ชื่อเครื่องพิมพ์ที่ติดตั้งในระบบ</label
-              >
-              <input
-                id="printer-target"
-                type="text"
-                class="input-field"
-                bind:value={printerTarget}
-                placeholder="เช่น POS-80 หรือ Thermal Printer"
-              />
+            <!-- Printer Behavior Card -->
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>พฤติกรรมการพิมพ์</h3>
+                  <p>กำหนดการพิมพ์อัตโนมัติและการแสดงตัวอย่างก่อนพิมพ์</p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row fluent-row-action">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title">พิมพ์ใบเสร็จอัตโนมัติ</span>
+                    <span class="fluent-row-desc"
+                      >สั่งพิมพ์ใบเสร็จผ่านเครื่องพิมพ์ทันทีเมื่อรับชำระเงินสำเร็จ</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <label class="toggle-switch">
+                      <input
+                        type="checkbox"
+                        bind:checked={autoPrintEnabled}
+                        disabled={printerConnection === "none"}
+                      />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="fluent-row fluent-row-action">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title"
+                      >แสดงตัวอย่างใบเสร็จก่อนพิมพ์</span
+                    >
+                    <span class="fluent-row-desc"
+                      >เปิดหน้าต่างพรีวิวใบเสร็จเพื่อตรวจสอบรายการก่อนส่งพิมพ์</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <label class="toggle-switch">
+                      <input
+                        type="checkbox"
+                        bind:checked={receiptPreviewEnabled}
+                      />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Printer Hardware Card -->
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>การเชื่อมต่อและฮาร์ดแวร์เครื่องพิมพ์</h3>
+                  <p>
+                    เลือกวิธีการเชื่อมต่อเครื่องพิมพ์ใบเสร็จความร้อน (Thermal
+                    Printer)
+                  </p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title">ประเภทการเชื่อมต่อ</span>
+                    <span class="fluent-row-desc"
+                      >เลือกโหมดการเชื่อมต่อกับเครื่องพิมพ์ในระบบ</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <Dropdown
+                      id="printer-connection"
+                      label=""
+                      options={printerConnectionOptions}
+                      bind:value={printerConnection}
+                      onchange={handleConnectionChange}
+                      minWidth="100%"
+                    />
+                  </div>
+                </div>
+
+                {#if printerConnection === "usb"}
+                  <div class="fluent-row">
+                    <div class="fluent-row-info">
+                      <span class="fluent-row-title">เครื่องพิมพ์ในระบบ</span>
+                      <span class="fluent-row-desc"
+                        >เลือกไดรเวอร์เครื่องพิมพ์ที่เชื่อมต่อผ่านสาย USB</span
+                      >
+                      <button
+                        type="button"
+                        class="btn-text-action"
+                        onclick={loadSystemPrinters}
+                        disabled={loadingPrinters}
+                        title="ค้นหาเครื่องพิมพ์ใหม่"
+                      >
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2.2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          class:spin={loadingPrinters}
+                        >
+                          <path
+                            d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"
+                          />
+                          <polyline points="21 3 21 8 16 8" />
+                        </svg>
+                        <span
+                          >{loadingPrinters
+                            ? "กำลังค้นหา..."
+                            : "ค้นหาเครื่องพิมพ์ใหม่"}</span
+                        >
+                      </button>
+                    </div>
+                    <div class="fluent-row-control">
+                      <Dropdown
+                        id="usb-printer-select"
+                        label=""
+                        options={usbPrinterOptions}
+                        bind:value={selectedUsbPrinter}
+                        onchange={handleUsbPrinterChange}
+                        minWidth="100%"
+                      />
+                      {#if isManualUsb}
+                        <input
+                          id="printer-target-manual"
+                          type="text"
+                          class="input-field input-modern"
+                          style="margin-top: 8px;"
+                          bind:value={printerTarget}
+                          placeholder="ระบุชื่อเครื่องพิมพ์ เช่น POS-80"
+                        />
+                      {/if}
+                    </div>
+                  </div>
+                {:else if printerConnection === "network"}
+                  <div class="fluent-row">
+                    <div class="fluent-row-info">
+                      <span class="fluent-row-title"
+                        >ที่อยู่เครื่องพิมพ์เครือข่าย (IP:Port)</span
+                      >
+                      <span class="fluent-row-desc"
+                        >ระบุ IP Address และพอร์ต TCP 9100 ของเครื่องพิมพ์</span
+                      >
+                    </div>
+                    <div class="fluent-row-control">
+                      <input
+                        id="printer-target"
+                        type="text"
+                        class="input-field input-modern"
+                        bind:value={printerTarget}
+                        placeholder="192.168.1.200:9100"
+                      />
+                    </div>
+                  </div>
+                {/if}
+
+                {#if printerConnection !== "none"}
+                  <div class="fluent-row">
+                    <div class="fluent-row-info">
+                      <span class="fluent-row-title">ขนาดกระดาษความร้อน</span>
+                      <span class="fluent-row-desc"
+                        >ความกว้างของม้วนกระดาษใบเสร็จ</span
+                      >
+                    </div>
+                    <div class="fluent-row-control">
+                      <Dropdown
+                        id="paper-size"
+                        label=""
+                        options={paperSizeOptions.map((s) => ({
+                          value: s,
+                          label: `${s} มม.`,
+                        }))}
+                        bind:value={paperSize}
+                        minWidth="100%"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="fluent-row">
+                    <div class="fluent-row-info">
+                      <span class="fluent-row-title">รูปแบบฟอนต์ใบเสร็จ</span>
+                      <span class="fluent-row-desc">
+                        {receiptFont === "sarabun"
+                          ? "โหมดกราฟิกความคมชัดสูง เรนเดอร์สระและวรรณยุกต์ไทยเรียงตัวสวยงาม 100%"
+                          : "โหมดข้อความดั้งเดิม พิมพ์เร็วที่สุดผ่านชิปฮาร์ดแวร์เครื่องพิมพ์"}
+                      </span>
+                    </div>
+                    <div class="fluent-row-control">
+                      <Dropdown
+                        id="receipt-font"
+                        label=""
+                        options={receiptFontOptions}
+                        bind:value={receiptFont}
+                        minWidth="100%"
+                      />
+                    </div>
+                  </div>
+
+                  {#if receiptFont === "device"}
+                    <div class="fluent-row">
+                      <div class="fluent-row-info">
+                        <span class="fluent-row-title"
+                          >รหัสภาษาไทย (Code Page)</span
+                        >
+                        <span class="fluent-row-desc"
+                          >ตารางรหัสภาษาไทยของฮาร์ดแวร์เครื่องพิมพ์</span
+                        >
+                      </div>
+                      <div class="fluent-row-control">
+                        <Dropdown
+                          id="printer-codepage"
+                          label=""
+                          options={codepageOptions}
+                          bind:value={printerCodepage}
+                          minWidth="100%"
+                        />
+                      </div>
+                    </div>
+                  {/if}
+                {/if}
+              </div>
+            </div>
+
+            <!-- PromptPay QR on Receipt -->
+            {#if printerConnection !== "none"}
+              <div class="fluent-section-card">
+                <div class="section-card-header">
+                  <div class="section-card-title-group">
+                    <h3>พร้อมเพย์ QR Code บนใบเสร็จ</h3>
+                    <p>
+                      พิมพ์ QR Code
+                      สำหรับให้ลูกค้าสแกนชำระเงินท้ายใบเสร็จรับเงิน
+                    </p>
+                  </div>
+                </div>
+
+                <div class="fluent-rows-group">
+                  <div class="fluent-row fluent-row-action">
+                    <div class="fluent-row-info">
+                      <span class="fluent-row-title"
+                        >พิมพ์ QR พร้อมเพย์บนใบเสร็จ</span
+                      >
+                      <span class="fluent-row-desc"
+                        >สร้าง QR Code พร้อมเพย์ตามยอดบิลโดยอัตโนมัติ</span
+                      >
+                    </div>
+                    <div class="fluent-row-control">
+                      <label class="toggle-switch">
+                        <input
+                          type="checkbox"
+                          bind:checked={promptpayQrEnabled}
+                        />
+                        <span class="toggle-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {#if promptpayQrEnabled}
+                    <div class="fluent-row">
+                      <div class="fluent-row-info">
+                        <label for="promptpay-id">หมายเลข PromptPay</label>
+                        <span class="fluent-row-desc"
+                          >เบอร์โทรศัพท์ 10 หลัก หรือ เลขประจำตัวประชาชน 13 หลัก</span
+                        >
+                      </div>
+                      <div class="fluent-row-control">
+                        <input
+                          id="promptpay-id"
+                          type="text"
+                          class="input-field input-modern"
+                          bind:value={promptpayId}
+                          placeholder="0812345678 หรือ 1234567890123"
+                        />
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Test Print Card -->
+              <div class="fluent-section-card">
+                <div class="section-card-header">
+                  <div class="section-card-title-group">
+                    <h3>ทดสอบการพิมพ์</h3>
+                    <p>
+                      พิมพ์ใบเสร็จทดสอบเพื่อตรวจสอบการเชื่อมต่อและความคมชัดของตัวอักษร
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-outline btn-test-print"
+                    onclick={testPrint}
+                    disabled={testingPrint}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polyline points="6 9 6 2 18 2 18 9" />
+                      <path
+                        d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+                      />
+                      <rect x="6" y="14" width="12" height="8" />
+                    </svg>
+                    <span
+                      >{testingPrint
+                        ? "กำลังพิมพ์..."
+                        : "ทดสอบพิมพ์ใบเสร็จ"}</span
+                    >
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <!-- SUBPAGE 3: STOCK & SALES -->
+          {:else if activeCategory === "stock"}
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>กฎการขายและการตัดสต็อก</h3>
+                  <p>
+                    กำหนดเงื่อนไขการขายเมื่อสินค้าหมดและการแจ้งเตือนสต็อกใกล้หมด
+                  </p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row fluent-row-action">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title"
+                      >อนุญาตให้ขายสินค้าได้เมื่อสินค้าหมดสต๊อก</span
+                    >
+                    <span class="fluent-row-desc"
+                      >เมื่อเปิดใช้งาน ระบบจะอนุญาตให้ขายต่อไปได้แม้สต็อกจะเหลือ
+                      0 หรือติดลบ</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <label class="toggle-switch">
+                      <input
+                        type="checkbox"
+                        bind:checked={allowOutOfStockSale}
+                      />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="fluent-row fluent-row-action">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title"
+                      >เปิดการแจ้งเตือนสต็อกต่ำ</span
+                    >
+                    <span class="fluent-row-desc"
+                      >แสดงการแจ้งเตือนเมื่อจำนวนสินค้าในคลังลดลงถึงเกณฑ์ขั้นต่ำ</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <label class="toggle-switch">
+                      <input type="checkbox" bind:checked={lowStockAlert} />
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                {#if lowStockAlert}
+                  <div class="fluent-row">
+                    <div class="fluent-row-info">
+                      <label for="low-stock-threshold"
+                        >ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือน (ชิ้น)</label
+                      >
+                      <span class="fluent-row-desc"
+                        >จำนวนชิ้นที่ระบบจะเริ่มแจ้งเตือนว่าสินค้าใกล้หมด</span
+                      >
+                    </div>
+                    <div class="fluent-row-control">
+                      <input
+                        id="low-stock-threshold"
+                        type="number"
+                        min="0"
+                        class="input-field input-modern"
+                        bind:value={lowStockThreshold}
+                        placeholder="10"
+                      />
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            </div>
+
+            <!-- SUBPAGE 4: SYSTEM SETTINGS -->
+          {:else if activeCategory === "system"}
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>การตั้งค่าทั่วไปและสกุลเงิน</h3>
+                  <p>กำหนดสกุลเงินหลักที่ใช้แสดงผลราคาและคำนวณเงินในระบบ</p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title">สกุลเงินของระบบ</span>
+                    <span class="fluent-row-desc"
+                      >สกุลเงินที่ใช้สำหรับแสดงราคาสินค้า รายงาน และยอดชำระเงิน</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <Dropdown
+                      id="currency"
+                      label=""
+                      options={currencyOptions.map((c) => ({
+                        value: c,
+                        label: c,
+                      }))}
+                      bind:value={currency}
+                      minWidth="100%"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           {/if}
-        {:else if printerConnection === "network"}
-          <div class="form-group">
-            <label for="printer-target"
-              >ที่อยู่เครื่องพิมพ์เครือข่าย (IP:Port)</label
+
+          <!-- Bottom Action Bar inside Subpage -->
+          <div class="subpage-bottom-bar">
+            <button
+              type="button"
+              class="btn-outline"
+              onclick={() => navigateToCategory(null)}
             >
-            <input
-              id="printer-target"
-              type="text"
-              class="input-field"
-              bind:value={printerTarget}
-              placeholder="192.168.1.200:9100"
-            />
-          </div>
-        {/if}
-
-        {#if printerConnection !== "none"}
-          <div class="form-group">
-            <Dropdown
-              id="paper-size"
-              label="ขนาดกระดาษ (มม.)"
-              options={paperSizeOptions.map((s) => ({
-                value: s,
-                label: `${s} มม.`,
-              }))}
-              bind:value={paperSize}
-              minWidth="100%"
-            />
-          </div>
-
-          <div class="form-group">
-            <Dropdown
-              id="receipt-font"
-              label="รูปแบบฟอนต์ใบเสร็จ"
-              options={receiptFontOptions}
-              bind:value={receiptFont}
-              minWidth="100%"
-            />
-            <span class="form-hint">
-              {receiptFont === "sarabun"
-                ? "โหมดกราฟิกความคมชัดสูง เรนเดอร์สระและวรรณยุกต์ไทยเรียงตัวสวยงาม 100%"
-                : "โหมดข้อความดั้งเดิม พิมพ์เร็วที่สุดผ่านชิปฮาร์ดแวร์เครื่องพิมพ์"}
-            </span>
-          </div>
-
-          {#if receiptFont === "device"}
-            <div class="form-group">
-              <Dropdown
-                id="printer-codepage"
-                label="รหัสภาษาไทย (Code Page)"
-                options={codepageOptions}
-                bind:value={printerCodepage}
-                minWidth="100%"
-              />
-            </div>
-          {/if}
-        {/if}
-
-        {#if printerConnection !== "none"}
-          <div
-            class="checkbox-group"
-            style="margin-top: 4px; margin-bottom: 4px;"
-          >
-            <label class="checkbox-label">
-              <input type="checkbox" bind:checked={promptpayQrEnabled} />
-              <span>พิมพ์ QR พร้อมเพย์บนใบเสร็จ</span>
-            </label>
-          </div>
-
-          {#if promptpayQrEnabled}
-            <div class="form-group">
-              <label for="promptpay-id">เลข PromptPay สำหรับ QR บนใบเสร็จ</label
-              >
-              <input
-                id="promptpay-id"
-                type="text"
-                class="input-field"
-                bind:value={promptpayId}
-                placeholder="เบอร์โทร 10 หลัก / เลขบัตรประชาชน 13 หลัก"
-              />
-            </div>
-          {/if}
-        {/if}
-
-        {#if printerConnection !== "none"}
-          <button
-            type="button"
-            class="btn-outline"
-            onclick={testPrint}
-            disabled={testingPrint}
-          >
-            {testingPrint ? "กำลังพิมพ์..." : "ทดสอบการพิมพ์"}
-          </button>
-        {/if}
-      </div>
-
-      <!-- Stock & Sales Settings -->
-      <div class="card">
-        <h2 class="section-title">การตั้งค่าสต็อกและการขาย</h2>
-        <div class="checkbox-group">
-          <label class="checkbox-label checkbox-label-block">
-            <input type="checkbox" bind:checked={allowOutOfStockSale} />
-            <div class="checkbox-text">
-              <span class="checkbox-title"
-                >อนุญาตให้ขายสินค้าได้เมื่อสินค้าหมดสต๊อก</span
-              >
-              <p class="checkbox-desc">
-                เมื่อเปิดใช้งาน ระบบจะอนุญาตให้ขายสินค้าต่อไปได้แม้สต็อกจะเหลือ
-                0 หรือติดลบ
-              </p>
-            </div>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" bind:checked={lowStockAlert} />
-            <span>เปิดการแจ้งเตือนสต็อกต่ำ</span>
-          </label>
-        </div>
-        {#if lowStockAlert}
-          <div class="form-group">
-            <label for="low-stock-threshold"
-              >ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือน (ชิ้น)</label
+              ย้อนกลับ
+            </button>
+            <button
+              type="button"
+              class="btn-primary"
+              onclick={() => saveCategory(activeCategory!)}
+              disabled={saving}
             >
-            <input
-              id="low-stock-threshold"
-              type="number"
-              min="0"
-              class="input-field"
-              bind:value={lowStockThreshold}
-              placeholder="10"
-            />
+              {saving
+                ? "กำลังบันทึก..."
+                : `บันทึก${categoryTitles[activeCategory].title}`}
+            </button>
           </div>
-        {/if}
-      </div>
-
-      <!-- System Settings -->
-      <div class="card">
-        <h2 class="section-title">การตั้งค่าระบบ</h2>
-        <div class="form-group">
-          <Dropdown
-            id="currency"
-            label="สกุลเงิน"
-            options={currencyOptions.map((c) => ({ value: c, label: c }))}
-            bind:value={currency}
-            minWidth="100%"
-          />
         </div>
       </div>
-    </div>
+    {/if}
   {/if}
 
+  <!-- Toast Notification -->
   {#if toastMessage}
     <div class="save-toast">
       <svg
@@ -674,17 +1508,64 @@
   {/if}
 </div>
 
-<ConfirmModal
-  open={showSaveConfirm}
-  title="ยืนยันการบันทึกการตั้งค่า"
-  message={`ต้องการบันทึกการตั้งค่า ใช่หรือไม่?`}
-  confirmText="บันทึก"
-  cancelText="ยกเลิก"
-  variant="primary"
-  onConfirm={confirmSaveSettings}
-  onCancel={cancelSave}
-/>
+<!-- UNSAVED CHANGES CONFIRMATION MODAL -->
+<Modal
+  open={unsavedModal.open}
+  title="บันทึกการเปลี่ยนแปลงหรือไม่?"
+  onClose={handleCancelUnsavedModal}
+  maxWidth="460px"
+>
+  <div class="unsaved-modal-body">
+    <div class="unsaved-modal-icon">
+      <svg
+        width="28"
+        height="28"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+    </div>
+    <div class="unsaved-modal-text">
+      <p>
+        คุณมีการแก้ไขข้อมูลที่ยังไม่ได้บันทึก
+        ต้องการบันทึกก่อนออกจากหน้านี้หรือไม่?
+      </p>
+    </div>
+  </div>
+  <div class="unsaved-modal-actions">
+    <button
+      type="button"
+      class="btn-outline btn-discard"
+      onclick={handleDiscardAndLeave}
+    >
+      ไม่บันทึก
+    </button>
+    <button
+      type="button"
+      class="btn-outline"
+      onclick={handleCancelUnsavedModal}
+    >
+      ยกเลิก
+    </button>
+    <button
+      type="button"
+      class="btn-primary"
+      onclick={handleSaveAndLeave}
+      disabled={saving}
+    >
+      {saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
+    </button>
+  </div>
+</Modal>
 
+<!-- ERROR MODAL -->
 <ErrorModal
   open={errorModal.open}
   title={errorModal.title}
@@ -695,132 +1576,587 @@
 />
 
 <style>
-  .topbar {
-    padding: var(--space-xl) var(--space-xl) 0 var(--space-xl);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .topbar h1 {
-    margin-bottom: 0;
-  }
-
-  .content-area {
+  .settings-container {
     padding: var(--space-xl);
     flex: 1;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    max-width: 960px;
+    margin: 0 auto;
+    width: 100%;
   }
 
-  .settings-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  /* Hub Header */
+  .hub-header {
+    margin-bottom: var(--space-lg);
+  }
+
+  .hub-title-group h1 {
+    font-size: 28px;
+    margin-bottom: 4px;
+    color: var(--color-text-primary);
+  }
+
+  .hub-subtitle {
+    font-size: 14px;
+    color: var(--color-text-primary);
+    opacity: 0.7;
+    margin: 0;
+  }
+
+  /* Store Overview Hero Banner */
+  .store-hero-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    background: linear-gradient(
+      135deg,
+      var(--color-surface) 0%,
+      rgba(94, 129, 172, 0.08) 100%
+    );
+    border: var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: var(--space-lg);
+  }
+
+  .store-hero-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background-color: rgba(94, 129, 172, 0.12);
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .store-hero-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .store-hero-name {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  .store-hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background-color: rgba(94, 129, 172, 0.12);
+    color: var(--color-primary);
+  }
+
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-accent-success);
+  }
+
+  .badge-secondary {
+    background-color: rgba(46, 52, 64, 0.06);
+    color: var(--color-text-primary);
+    opacity: 0.85;
+  }
+
+  .badge-accent {
+    background-color: rgba(163, 190, 140, 0.2);
+    color: #4c6b38;
+  }
+
+  /* CATEGORY LIST - MATCHING USER IMAGE SPEC */
+  .category-list-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .category-item-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    background-color: var(--color-surface);
+    border: var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .category-item-card:hover {
+    background-color: rgba(94, 129, 172, 0.05);
+    border-color: rgba(94, 129, 172, 0.4);
+  }
+
+  .category-icon-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background-color: rgba(94, 129, 172, 0.08);
+    color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  .category-text-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .category-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .category-desc {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    opacity: 0.65;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dirty-indicator {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-danger);
+    background-color: rgba(191, 97, 106, 0.1);
+    padding: 3px 8px;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+
+  .category-chevron {
+    color: var(--color-text-primary);
+    opacity: 0.4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition:
+      transform 0.18s ease,
+      opacity 0.18s ease;
+  }
+
+  .category-item-card:hover .category-chevron {
+    transform: translateX(3px);
+    opacity: 0.8;
+  }
+
+  /* SUBPAGE VIEW */
+  .subpage-view {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-lg);
   }
 
-  .section-title {
-    font-size: 18px;
-    margin-bottom: var(--space-lg);
-    color: var(--color-text-primary);
-  }
-
-  .checkbox-group {
+  .subpage-header {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    margin-bottom: var(--space-lg);
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
   }
 
-  .checkbox-label {
+  .breadcrumb-nav {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     font-size: 15px;
-    cursor: pointer;
   }
 
-  .checkbox-label input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--color-primary);
-    cursor: pointer;
-  }
-
-  .checkbox-label-block {
-    align-items: flex-start;
-  }
-
-  .checkbox-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .checkbox-title {
+  .btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-weight: 500;
+    color: var(--color-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-back:hover {
+    background-color: rgba(94, 129, 172, 0.15);
+  }
+
+  .breadcrumb-separator {
+    color: var(--color-text-primary);
+    opacity: 0.4;
+  }
+
+  .breadcrumb-current {
+    font-weight: 600;
     color: var(--color-text-primary);
   }
 
-  .checkbox-desc {
+  .dirty-pill {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-danger);
+    background-color: rgba(191, 97, 106, 0.12);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* Quick Switcher Tabs */
+  .category-tabs-bar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--color-muted);
+  }
+
+  .tab-pill {
+    position: relative;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    opacity: 0.75;
+    background: transparent;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tab-pill:hover {
+    opacity: 1;
+    background-color: rgba(94, 129, 172, 0.08);
+  }
+
+  .tab-pill.active {
+    opacity: 1;
+    color: var(--color-primary);
+    background-color: rgba(94, 129, 172, 0.12);
+    font-weight: 600;
+  }
+
+  .tab-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-danger);
+  }
+
+  /* Subpage Content & Fluent Cards */
+  .subpage-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+
+  .fluent-section-card {
+    background-color: var(--color-surface);
+    border: var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .section-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(216, 222, 233, 0.6);
+  }
+
+  .section-card-title-group h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 4px 0;
+  }
+
+  .section-card-title-group p {
     font-size: 13px;
     color: var(--color-text-primary);
     opacity: 0.65;
     margin: 0;
+  }
+
+  .fluent-rows-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .fluent-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    padding: 4px 0;
+  }
+
+  .fluent-row-action {
+    padding: 8px 0;
+  }
+
+  .fluent-row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+  }
+
+  .fluent-row-info label,
+  .fluent-row-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  .fluent-row-desc {
+    font-size: 13px;
+    color: var(--color-text-primary);
+    opacity: 0.65;
     line-height: 1.4;
   }
 
-  .form-group {
-    margin-bottom: var(--space-md);
+  .fluent-row-control {
+    width: 320px;
+    max-width: 50%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
   }
 
-  .form-group label {
+  .input-modern {
+    width: 100%;
+  }
+
+  .subpage-bottom-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-muted);
+  }
+
+  /* TOGGLE SWITCH COMPONENT */
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .toggle-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #d8dee9;
+    border-radius: 26px;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .toggle-switch input:checked + .toggle-slider {
+    background-color: var(--color-primary);
+  }
+
+  .toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+  }
+
+  .toggle-switch input:disabled + .toggle-slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Notice and Actions */
+  .printer-none-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background-color: rgba(94, 129, 172, 0.08);
+    border: 1px solid rgba(94, 129, 172, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+  }
+
+  .printer-none-notice svg {
+    color: var(--color-primary);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .printer-none-notice strong {
     display: block;
     font-size: 14px;
-    font-weight: 500;
-    color: var(--color-text-primary);
-    opacity: 0.8;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
   }
 
-  .form-group label.label-error {
+  .printer-none-notice p {
+    margin: 0;
+    font-size: 13px;
+    opacity: 0.75;
+    line-height: 1.4;
+  }
+
+  .btn-text-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-primary);
+    cursor: pointer;
+    padding: 2px 6px;
+    margin-top: 4px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    align-self: flex-start;
+  }
+
+  .btn-text-action:hover:not(:disabled) {
+    background-color: rgba(94, 129, 172, 0.1);
+  }
+
+  .btn-text-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-text-action svg.spin {
+    animation: spin 0.8s linear infinite;
+  }
+
+  .btn-test-print {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .label-error {
     color: var(--color-danger);
-    opacity: 1;
   }
 
   .input-error {
     border-color: var(--color-danger) !important;
   }
 
-  .input-error:focus {
-    box-shadow: 0 0 0 3px rgba(191, 97, 106, 0.15);
-    border-color: var(--color-danger);
-  }
-
   .error-text {
     font-size: 12px;
     color: var(--color-danger);
     font-weight: 500;
+    margin-top: 4px;
   }
 
-  .form-group textarea {
-    resize: vertical;
-    min-height: 80px;
+  /* Unsaved Modal Content */
+  .unsaved-modal-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: var(--space-lg);
   }
 
-  .loading-state,
-  .error-state {
-    padding: var(--space-xl);
-    text-align: center;
-    font-size: 15px;
-    color: var(--color-text-primary);
-    opacity: 0.7;
-  }
-
-  .error-state {
+  .unsaved-modal-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: rgba(191, 97, 106, 0.12);
     color: var(--color-danger);
-    opacity: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
+  .unsaved-modal-text p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--color-text-primary);
+  }
+
+  .unsaved-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn-discard {
+    color: var(--color-danger);
+    border-color: rgba(191, 97, 106, 0.3);
+  }
+
+  .btn-discard:hover {
+    background-color: rgba(191, 97, 106, 0.08);
+    border-color: var(--color-danger);
+  }
+
+  /* Toast Notification */
   .save-toast {
     position: fixed;
     bottom: var(--space-xl);
@@ -848,83 +2184,6 @@
       transform: translateY(0);
     }
   }
-  .printer-none-notice {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-md);
-    padding: var(--space-md);
-    background-color: rgba(94, 129, 172, 0.08);
-    border: 1px solid rgba(94, 129, 172, 0.2);
-    border-radius: var(--radius-md);
-    margin-bottom: var(--space-md);
-    color: var(--color-text-primary);
-  }
-
-  .printer-none-notice svg {
-    color: var(--color-primary);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .printer-none-notice strong {
-    display: block;
-    font-size: 14px;
-    margin-bottom: 2px;
-  }
-
-  .printer-none-notice p {
-    margin: 0;
-    font-size: 13px;
-    opacity: 0.75;
-    line-height: 1.4;
-  }
-
-  .form-hint {
-    display: block;
-    font-size: 12px;
-    opacity: 0.7;
-    margin-top: 4px;
-    line-height: 1.4;
-  }
-
-  .label-with-action {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-
-  .label-with-action label {
-    margin-bottom: 0;
-  }
-
-  .btn-text-action {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: none;
-    border: none;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--color-primary);
-    cursor: pointer;
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    transition: all 0.15s ease;
-  }
-
-  .btn-text-action:hover:not(:disabled) {
-    background-color: rgba(94, 129, 172, 0.1);
-  }
-
-  .btn-text-action:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-text-action svg.spin {
-    animation: spin 0.8s linear infinite;
-  }
 
   @keyframes spin {
     from {
@@ -935,8 +2194,39 @@
     }
   }
 
-  .disabled-label {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .loading-state,
+  .error-state {
+    padding: 60px var(--space-xl);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--color-text-primary);
+    opacity: 0.7;
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(94, 129, 172, 0.2);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @media (max-width: 640px) {
+    .fluent-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .fluent-row-control {
+      width: 100%;
+      max-width: 100%;
+      align-items: flex-start;
+    }
   }
 </style>

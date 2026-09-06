@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ErrorModal from '$lib/components/ErrorModal.svelte';
   import { parseAppError } from '$lib/utils/errorHandler';
@@ -18,26 +18,72 @@
 
   let store = $state<StoreSettings>({ store_name: 'Easy Stock', store_address: '', store_phone: '' });
   let receiptFont = $state('sarabun');
+  let autoPrintEnabled = $state(false);
   let printing = $state(false);
   let printSuccess = $state(false);
+  let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastAutoPrintedOrderId = $state<string | null>(null);
 
   let errorModal = $state({ open: false, title: '', message: '', details: '' });
 
-  onMount(async () => {
+  async function loadSettings() {
     try {
       const res = (await invoke('get_settings')) as any;
       store = res as StoreSettings;
       receiptFont = res.receipt_font || 'sarabun';
+      autoPrintEnabled = res.auto_print_enabled !== 'false' && res.printer_connection !== 'none';
     } catch {
       // ใช้ค่าเริ่มต้นหากโหลด settings ไม่ได้
     }
+  }
+
+  onMount(() => {
+    loadSettings();
   });
 
-  // รีเซ็ตสถานะพิมพ์ทุกครั้งที่เปิดด้วยบิลใหม่
+  onDestroy(() => {
+    if (autoCloseTimer) {
+      clearTimeout(autoCloseTimer);
+    }
+  });
+
+  function handleClose() {
+    if (autoCloseTimer) {
+      clearTimeout(autoCloseTimer);
+      autoCloseTimer = null;
+    }
+    onClose();
+  }
+
+  // รีเซ็ตสถานะพิมพ์ทุกครั้งที่เปิดด้วยบิลใหม่ (โหมดตัวอย่างใบเสร็จ ต้องรอกดยืนยันเสมอ)
   $effect(() => {
     if (open) {
       printSuccess = false;
+      if (autoCloseTimer) {
+        clearTimeout(autoCloseTimer);
+        autoCloseTimer = null;
+      }
+    } else {
+      if (autoCloseTimer) {
+        clearTimeout(autoCloseTimer);
+        autoCloseTimer = null;
+      }
     }
+  });
+
+  // รองรับการกดปุ่ม Enter เพื่อยืนยันการพิมพ์ทันที
+  $effect(() => {
+    if (!open) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Enter' && !printing && !printSuccess) {
+        e.preventDefault();
+        printReceipt();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   });
 
   function formatMoney(n: number): string {
@@ -61,6 +107,12 @@
     try {
       await invoke('print_receipt', { orderId: order.order_id });
       printSuccess = true;
+
+      // ปิด modal อัตโนมัติหลังพิมพ์สำเร็จ 1.2 วินาที
+      if (autoCloseTimer) clearTimeout(autoCloseTimer);
+      autoCloseTimer = setTimeout(() => {
+        handleClose();
+      }, 1200);
     } catch (e) {
       const parsed = parseAppError(e, 'พิมพ์ใบเสร็จไม่สำเร็จ');
       errorModal = { open: true, title: parsed.title, message: parsed.message, details: parsed.details ?? '' };
@@ -70,7 +122,7 @@
   }
 </script>
 
-<Modal {open} title="ตัวอย่างใบเสร็จ" onClose={onClose} maxWidth="420px">
+<Modal {open} title="ตัวอย่างใบเสร็จ" onClose={handleClose} maxWidth="420px">
   <div class="preview-content">
     {#if order}
       <div class="receipt-paper {receiptFont === 'sarabun' ? 'font-sarabun' : 'font-device'}">
@@ -115,26 +167,53 @@
         <div class="receipt-center receipt-muted">ขอบคุณที่ใช้บริการ</div>
       </div>
 
+      <!-- Action Buttons -->
       <div class="preview-actions">
-        <button type="button" class="btn-outline" onclick={onClose}>
+        <button type="button" class="btn-outline" onclick={handleClose}>
           ปิด
         </button>
         <button
           type="button"
           class="btn-primary print-btn"
+          class:btn-success={printSuccess}
           onclick={printReceipt}
           disabled={printing}
         >
-          {printing
-            ? 'กำลังพิมพ์...'
-            : printSuccess
-              ? 'พิมพ์ซ้ำอีกครั้ง'
-              : 'พิมพ์ใบเสร็จ'}
+          {#if printing}
+            <span class="btn-inner">
+              <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                <polyline points="21 3 21 8 16 8" />
+              </svg>
+              <span>กำลังพิมพ์...</span>
+            </span>
+          {:else if printSuccess}
+            <span class="btn-inner">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>สั่งพิมพ์ใบเสร็จเรียบร้อยแล้ว</span>
+            </span>
+          {:else}
+            <span class="btn-inner">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <rect x="6" y="14" width="12" height="8" />
+              </svg>
+              <span>ยืนยันพิมพ์ใบเสร็จ (Enter)</span>
+            </span>
+          {/if}
         </button>
       </div>
 
       {#if printSuccess}
-        <div class="print-toast">สั่งพิมพ์ใบเสร็จเรียบร้อยแล้ว</div>
+        <div class="print-status-banner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>สั่งพิมพ์เรียบร้อยแล้ว (กำลังปิดหน้าต่างอัตโนมัติ...)</span>
+        </div>
       {/if}
     {/if}
   </div>
@@ -221,34 +300,62 @@
 
   .preview-actions .btn-outline {
     flex: 1;
+    min-width: 80px;
   }
 
   .print-btn {
     flex: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
   }
 
-  .print-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .print-toast {
-    position: fixed;
-    bottom: var(--space-xl);
-    right: var(--space-xl);
+  .print-btn.btn-success {
     background-color: var(--color-accent-success);
     color: var(--color-surface);
-    padding: 12px 24px;
-    border-radius: var(--radius-md);
+  }
+
+  .btn-inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
     font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    animation: fadeIn 0.3s ease;
+  }
+
+  .print-status-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    background-color: rgba(163, 190, 140, 0.18);
+    color: #3b5726;
+    font-size: 13px;
+    font-weight: 500;
+    animation: fadeIn 0.25s ease;
+  }
+
+  .spin {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @keyframes fadeIn {
     from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;

@@ -40,11 +40,18 @@
     }
   });
 
+  const normalizedTotal = $derived(Math.round(total * 100) / 100);
   const paid = $derived(
-    paymentMethod === 'CASH' ? Number(cashInput) || 0 : total
+    paymentMethod === 'CASH'
+      ? Math.round((Number(cashInput) || 0) * 100) / 100
+      : normalizedTotal
   );
-  const change = $derived(Math.max(0, paid - total));
-  const canPay = $derived(paymentMethod !== 'CASH' || paid >= total);
+  const change = $derived(
+    Math.max(0, Math.round((paid - normalizedTotal) * 100) / 100)
+  );
+  const canPay = $derived(
+    paymentMethod !== 'CASH' || paid >= normalizedTotal - 0.001
+  );
 
   function formatMoney(n: number): string {
     return n.toLocaleString('th-TH', { minimumFractionDigits: 2 });
@@ -56,15 +63,15 @@
     try {
       const order = (await invoke('create_order', {
         payload: {
-          subtotal: cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0),
-          discountAmount,
+          subtotal: Math.round(cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) * 100) / 100,
+          discountAmount: Math.round(discountAmount * 100) / 100,
           paymentMethod,
           paidAmount: paid,
           items: cart.map((i) => ({
             productId: i.product_id,
             productName: i.product_name,
             quantity: i.quantity,
-            unitPrice: i.unit_price,
+            unitPrice: Math.round(i.unit_price * 100) / 100,
           })),
         },
       })) as Order;
@@ -83,7 +90,7 @@
   <div class="checkout-content">
     <div class="total-banner">
       <span>ยอดที่ต้องชำระ</span>
-      <strong>{formatMoney(total)} ฿</strong>
+      <strong>{formatMoney(normalizedTotal)} ฿</strong>
     </div>
 
     <div class="method-row">
@@ -147,20 +154,20 @@
           <button
             type="button"
             class="btn-outline quick-btn exact"
-            onclick={() => (cashInput = total.toFixed(2))}
+            onclick={() => (cashInput = normalizedTotal.toFixed(2))}
           >
             ยอดตรง
           </button>
         </div>
 
-        <div class="change-row {paid >= total ? 'ready' : ''}">
+        <div class="change-row {canPay ? 'ready' : ''}">
           <span>เงินทอน</span>
           <strong>{formatMoney(change)} ฿</strong>
         </div>
       </div>
     {:else}
       <div class="qr-note">
-        ยืนยันการชำระผ่าน{paymentMethod === 'PROMPTPAY' ? ' PromptPay' : ' การโอนเงิน'}ยอด {formatMoney(total)} ฿
+        ยืนยันการชำระผ่าน{paymentMethod === 'PROMPTPAY' ? ' PromptPay' : ' การโอนเงิน'}ยอด {formatMoney(normalizedTotal)} ฿
       </div>
     {/if}
 
@@ -174,7 +181,7 @@
         onclick={confirmPayment}
         disabled={!canPay || processing}
       >
-        {processing ? 'กำลังบันทึก...' : `ยืนยันชำระเงิน ${formatMoney(total)} ฿`}
+        {processing ? 'กำลังบันทึก...' : `ยืนยันชำระเงิน ${formatMoney(normalizedTotal)} ฿`}
       </button>
     </div>
   </div>
