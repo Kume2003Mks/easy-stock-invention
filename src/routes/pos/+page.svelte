@@ -1,35 +1,42 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-  import { onMount } from 'svelte';
-  import ErrorModal from '$lib/components/ErrorModal.svelte';
-  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
-  import CheckoutModal from '$lib/components/pos/CheckoutModal.svelte';
-  import HoldOrdersModal from '$lib/components/pos/HoldOrdersModal.svelte';
-  import DiscountModal from '$lib/components/pos/DiscountModal.svelte';
-  import ReturnModal from '$lib/components/pos/ReturnModal.svelte';
-  import ReceiptPreviewModal from '$lib/components/pos/ReceiptPreviewModal.svelte';
-  import Dropdown from '$lib/components/Dropdown.svelte';
-  import { parseAppError } from '$lib/utils/errorHandler';
+  import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
+  import ErrorModal from "$lib/components/ErrorModal.svelte";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import CheckoutModal from "$lib/components/pos/CheckoutModal.svelte";
+  import HoldOrdersModal from "$lib/components/pos/HoldOrdersModal.svelte";
+  import DiscountModal from "$lib/components/pos/DiscountModal.svelte";
+  import ReturnModal from "$lib/components/pos/ReturnModal.svelte";
+  import ReceiptPreviewModal from "$lib/components/pos/ReceiptPreviewModal.svelte";
+  import Dropdown from "$lib/components/Dropdown.svelte";
+  import Pagination from "$lib/components/Pagination.svelte";
+  import { parseAppError } from "$lib/utils/errorHandler";
   import type {
     AppSettings,
     CartItem,
     CategoryForPos,
     Order,
     ProductForPos,
-  } from '$lib/types';
+    ProductsPageData,
+  } from "$lib/types";
 
-  // ---------- ข้อมูลสินค้า ----------
+  // ---------- ข้อมูลสินค้า & แบ่งหน้าหลังบ้าน ----------
   let products = $state<ProductForPos[]>([]);
   let categories = $state<CategoryForPos[]>([]);
   let loading = $state(true);
-  let loadError = $state('');
+  let loadError = $state("");
+  let totalItems = $state(0);
+  let currentPage = $state(1);
+  let pageSize = $state(30);
 
-  let search = $state('');
-  let activeCategory = $state<string | number>('all');
+  let search = $state("");
+  let activeCategory = $state<string | number>("all");
+  let isMounted = false;
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   const categoryOptions = $derived([
-    { value: 'all', label: 'ทั้งหมด' },
-    { value: 'none', label: 'ไม่มีหมวดหมู่' },
+    { value: "all", label: "ทั้งหมด" },
+    { value: "none", label: "ไม่มีหมวดหมู่" },
     ...categories.map((c) => ({ value: c.category_id, label: c.name })),
   ]);
 
@@ -48,7 +55,7 @@
   let receiptPreviewEnabled = $state(true);
   let allowOutOfStockSale = $state(false);
 
-  let errorModal = $state({ open: false, title: '', message: '', details: '' });
+  let errorModal = $state({ open: false, title: "", message: "", details: "" });
   let searchInput = $state<HTMLInputElement | null>(null);
 
   function showError(err: unknown, title: string) {
@@ -57,23 +64,32 @@
       open: true,
       title: parsed.title,
       message: parsed.message,
-      details: parsed.details ?? '',
+      details: parsed.details ?? "",
     };
   }
 
   async function loadProducts() {
+    loading = true;
     try {
-      const data = (await invoke('get_products_data', {
-        params: { page: 1, pageSize: 500 },
-      })) as {
-        products: ProductForPos[];
-        categories: CategoryForPos[];
-      };
-      products = data.products;
-      categories = data.categories;
-      loadError = '';
+      const data = (await invoke("get_products_data", {
+        params: {
+          page: currentPage,
+          pageSize: pageSize,
+          search: search.trim() || null,
+          categoryId:
+            activeCategory === "all"
+              ? null
+              : String(activeCategory),
+        },
+      })) as ProductsPageData;
+      products = data.products ?? [];
+      totalItems = Number(data.totalItems ?? (data as any).total_items ?? 0);
+      if (data.categories && data.categories.length > 0) {
+        categories = data.categories;
+      }
+      loadError = "";
     } catch (e) {
-      loadError = parseAppError(e, 'โหลดข้อมูลสินค้าไม่สำเร็จ').message;
+      loadError = parseAppError(e, "โหลดข้อมูลสินค้าไม่สำเร็จ").message;
     } finally {
       loading = false;
     }
@@ -81,50 +97,65 @@
 
   async function loadHeldCount() {
     try {
-      const held = (await invoke('get_held_orders')) as Order[];
+      const held = (await invoke("get_held_orders")) as Order[];
       heldCount = held.length;
     } catch {
       heldCount = 0;
     }
   }
 
+  // Effect สำหรับโหลดข้อมูลเมื่อเปลี่ยนหน้าหรือขนาดหน้า
+  $effect(() => {
+    const _p = currentPage;
+    const _s = pageSize;
+    if (!isMounted) return;
+    loadProducts();
+  });
+
   onMount(async () => {
     await Promise.all([loadProducts(), loadHeldCount()]);
+    isMounted = true;
     try {
-      const settings = (await invoke('get_settings')) as AppSettings;
-      receiptPreviewEnabled = settings.receipt_preview_enabled !== 'false';
-      allowOutOfStockSale = settings.allow_out_of_stock_sale === 'true';
+      const settings = (await invoke("get_settings")) as AppSettings;
+      receiptPreviewEnabled = settings.receipt_preview_enabled !== "false";
+      allowOutOfStockSale = settings.allow_out_of_stock_sale === "true";
     } catch {
       receiptPreviewEnabled = true;
       allowOutOfStockSale = false;
     }
   });
 
-  // ---------- Derived ----------
-  const filteredProducts = $derived.by(() => {
-    const term = search.trim().toLowerCase();
-    const cat = String(activeCategory);
-    return products.filter((p) => {
-      const matchCat =
-        cat === 'all' ||
-        (cat === 'none' ? !p.category_id : p.category_id === cat);
-      const matchTerm =
-        !term ||
-        p.name.toLowerCase().includes(term) ||
-        (p.barcode ?? '').toLowerCase().includes(term);
-      return matchCat && matchTerm;
-    });
-  });
+  function handleSearchInput() {
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      if (currentPage !== 1) {
+        currentPage = 1;
+      } else {
+        loadProducts();
+      }
+    }, 250);
+  }
+
+  function handleCategoryChange(val: string | number) {
+    activeCategory = val;
+    if (currentPage !== 1) {
+      currentPage = 1;
+    } else {
+      loadProducts();
+    }
+  }
 
   const cartSubtotal = $derived(
-    Math.round(cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) * 100) / 100
+    Math.round(
+      cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) * 100,
+    ) / 100,
   );
   const cartTotal = $derived(
-    Math.round(Math.max(0, cartSubtotal - discountAmount) * 100) / 100
+    Math.round(Math.max(0, cartSubtotal - discountAmount) * 100) / 100,
   );
 
   function formatMoney(n: number): string {
-    return n.toLocaleString('th-TH', { minimumFractionDigits: 2 });
+    return n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
   }
 
   // ---------- ตะกร้า ----------
@@ -132,7 +163,8 @@
     if (!allowOutOfStockSale && product.current_stock <= 0) return;
     const existing = cart.find((i) => i.product_id === product.product_id);
     if (existing) {
-      if (!allowOutOfStockSale && existing.quantity >= product.current_stock) return;
+      if (!allowOutOfStockSale && existing.quantity >= product.current_stock)
+        return;
       existing.quantity += 1;
     } else {
       cart.push({
@@ -169,12 +201,12 @@
   // ---------- พักบิล ----------
   async function holdBill() {
     if (cart.length === 0) return;
-    const holdName = `พัก ${new Date().toLocaleTimeString('th-TH', {
-      hour: '2-digit',
-      minute: '2-digit',
+    const holdName = `พัก ${new Date().toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
     })}`;
     try {
-      await invoke('hold_order', {
+      await invoke("hold_order", {
         payload: {
           holdName,
           subtotal: cartSubtotal,
@@ -190,7 +222,7 @@
       clearCart();
       await loadHeldCount();
     } catch (e) {
-      showError(e, 'พักบิลไม่สำเร็จ');
+      showError(e, "พักบิลไม่สำเร็จ");
     }
   }
 
@@ -198,7 +230,7 @@
     cart = order.items.map((item) => {
       const product = products.find((p) => p.product_id === item.product_id);
       return {
-        product_id: item.product_id ?? '',
+        product_id: item.product_id ?? "",
         product_name: item.product_name,
         quantity: item.quantity,
         unit_price: item.unit_price,
@@ -208,7 +240,7 @@
     discountAmount = order.discount_amount;
     // ลบบิลที่พักออกจากฐานข้อมูล (รายการย้ายเข้าตะกร้าแล้ว — พักใหม่ได้ภายหลัง)
     try {
-      await invoke('delete_held_order', { orderId: order.order_id });
+      await invoke("delete_held_order", { orderId: order.order_id });
     } catch {
       // หากลบไม่สำเร็จให้รายการยังอยู่ในรายการพัก
     }
@@ -229,8 +261,8 @@
   function handleKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement;
     const isTyping =
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
       target.isContentEditable;
     const modalOpen =
       showCheckout ||
@@ -240,7 +272,7 @@
       showClearConfirm ||
       previewOrder !== null;
 
-    if (e.key === 'F2') {
+    if (e.key === "F2") {
       e.preventDefault();
       searchInput?.focus();
       return;
@@ -248,28 +280,55 @@
     if (modalOpen || isTyping) return;
 
     // Shift+F4 — พักบิล
-    if (e.shiftKey && e.key === 'F4') {
+    if (e.shiftKey && e.key === "F4") {
       e.preventDefault();
       holdBill();
       return;
     }
     // Space / Enter — เปิดหน้าชำระเงิน
-    if (e.key === ' ' || e.key === 'Enter') {
+    if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
       if (cart.length > 0) showCheckout = true;
     }
   }
 
   // สแกนบาร์โค้ด — Enter เพิ่มสินค้าทันที
-  function handleBarcodeEnter() {
-    const term = search.trim().toLowerCase();
+  async function handleBarcodeEnter() {
+    const term = search.trim();
     if (!term) return;
-    const product =
-      products.find((p) => (p.barcode ?? '').toLowerCase() === term) ??
-      filteredProducts[0];
+
+    // 1. ตรวจสอบในรายการสินค้าที่โหลดอยู่ในหน้าปัจจุบันก่อน
+    let product = products.find(
+      (p) => (p.barcode ?? "").toLowerCase() === term.toLowerCase(),
+    );
+
+    // 2. ถ้าไม่พบในหน้าปัจจุบัน ให้ค้นหาจากหลังบ้านโดยตรงตามบาร์โค้ด/คำค้นหา
+    if (!product) {
+      try {
+        const data = (await invoke("get_products_data", {
+          params: { page: 1, pageSize: 1, search: term },
+        })) as ProductsPageData;
+        if (data.products && data.products.length > 0) {
+          product = data.products[0];
+        }
+      } catch (err) {
+        console.error("Barcode lookup error:", err);
+      }
+    }
+
+    // 3. หากยังไม่พบคงเหลือ ให้เลือกรายการแรกที่มีในหน้าปัจจุบัน
+    if (!product && products.length > 0) {
+      product = products[0];
+    }
+
     if (product) {
       addToCart(product);
-      search = '';
+      search = "";
+      if (currentPage !== 1) {
+        currentPage = 1;
+      } else {
+        loadProducts();
+      }
     }
   }
 </script>
@@ -279,12 +338,40 @@
 <header class="topbar">
   <h1>หน้าร้าน POS</h1>
   <div class="topbar-actions">
-    <button type="button" class="btn-outline" onclick={() => (showReturn = true)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+    <button
+      type="button"
+      class="btn-outline"
+      onclick={() => (showReturn = true)}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        ><polyline points="1 4 1 10 7 10" /><path
+          d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"
+        /></svg
+      >
       รับคืนสินค้า (RB)
     </button>
     <button type="button" class="btn-outline" onclick={() => (showHold = true)}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        ><circle cx="12" cy="12" r="10" /><polyline
+          points="12 6 12 12 16 14"
+        /></svg
+      >
       บิลที่พัก
       {#if heldCount > 0}
         <span class="held-badge">{heldCount}</span>
@@ -300,10 +387,12 @@
       <input
         bind:this={searchInput}
         bind:value={search}
+        oninput={handleSearchInput}
         onkeydown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
             handleBarcodeEnter();
           }
         }}
@@ -316,34 +405,63 @@
         label="หมวดหมู่:"
         options={categoryOptions}
         bind:value={activeCategory}
+        onchange={handleCategoryChange}
         minWidth="160px"
       />
     </div>
 
-    {#if loading}
+    {#if loading && products.length === 0}
       <div class="state-box">กำลังโหลดสินค้า...</div>
-    {:else if loadError}
+    {:else if loadError && products.length === 0}
       <div class="state-box error">{loadError}</div>
-    {:else if filteredProducts.length === 0}
+    {:else if products.length === 0}
       <div class="state-box">ไม่พบสินค้าที่ค้นหา</div>
     {:else}
-      <div class="product-grid">
-        {#each filteredProducts as product (product.product_id)}
+      <div class="product-grid" class:is-loading={loading}>
+        {#each products as product (product.product_id)}
           <button
             type="button"
-            class="product-card {product.current_stock <= 0 && !allowOutOfStockSale ? 'out-of-stock' : ''} {product.current_stock <= 0 && allowOutOfStockSale ? 'stock-allowed' : ''}"
+            class="product-card {product.current_stock <= 0 &&
+            !allowOutOfStockSale
+              ? 'out-of-stock'
+              : ''} {product.current_stock <= 0 && allowOutOfStockSale
+              ? 'stock-allowed'
+              : ''}"
             disabled={!allowOutOfStockSale && product.current_stock <= 0}
             onclick={() => addToCart(product)}
           >
             <span class="product-name">{product.name}</span>
-            <span class="product-price">{formatMoney(product.selling_price)} ฿</span>
-            <span class="product-stock {product.current_stock <= 0 ? (allowOutOfStockSale ? 'out-allowed' : 'low') : (product.current_stock <= 5 ? 'low' : '')}">
+            <span class="product-price"
+              >{formatMoney(product.selling_price)} ฿</span
+            >
+            <span
+              class="product-stock {product.current_stock <= 0
+                ? allowOutOfStockSale
+                  ? 'out-allowed'
+                  : 'low'
+                : product.current_stock <= 5
+                  ? 'low'
+                  : ''}"
+            >
               {product.current_stock <= 0
-                ? (allowOutOfStockSale ? `หมด (คงเหลือ ${product.current_stock})` : 'สินค้าหมด')
+                ? allowOutOfStockSale
+                  ? `หมด (คงเหลือ ${product.current_stock})`
+                  : "สินค้าหมด"
                 : `คงเหลือ ${product.current_stock}`}
             </span>
           </button>
         {/each}
+      </div>
+
+      <div class="pos-pagination-wrapper">
+        <Pagination
+          id="pos-products"
+          bind:currentPage
+          bind:pageSize
+          pageSizeOptions={[30, 50, 100]}
+          {totalItems}
+          itemLabel="รายการ"
+        />
       </div>
     {/if}
   </section>
@@ -366,22 +484,46 @@
           <div class="cart-item">
             <div class="cart-item-info">
               <span class="cart-item-name">{item.product_name}</span>
-              <span class="cart-item-price">{formatMoney(item.unit_price)} ฿</span>
+              <span class="cart-item-price"
+                >{formatMoney(item.unit_price)} ฿</span
+              >
             </div>
             <div class="cart-item-controls">
-              <button type="button" class="qty-btn" onclick={() => changeQty(index, -1)}>−</button>
+              <button
+                type="button"
+                class="qty-btn"
+                onclick={() => changeQty(index, -1)}>−</button
+              >
               <span class="qty-display">{item.quantity}</span>
               <button
                 type="button"
                 class="qty-btn"
                 onclick={() => changeQty(index, 1)}
                 disabled={!allowOutOfStockSale && item.quantity >= item.stock}
-              >+</button>
+                >+</button
+              >
             </div>
             <div class="cart-item-right">
-              <span class="cart-item-total">{formatMoney(item.unit_price * item.quantity)} ฿</span>
-              <button type="button" class="remove-btn" title="ลบรายการ" onclick={() => removeItem(index)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+              <span class="cart-item-total"
+                >{formatMoney(item.unit_price * item.quantity)} ฿</span
+              >
+              <button
+                type="button"
+                class="remove-btn"
+                title="ลบรายการ"
+                onclick={() => removeItem(index)}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  ><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg
+                >
               </button>
             </div>
           </div>
@@ -390,7 +532,11 @@
     </div>
 
     <div class="cart-summary">
-      <button type="button" class="discount-row" onclick={() => (showDiscount = true)}>
+      <button
+        type="button"
+        class="discount-row"
+        onclick={() => (showDiscount = true)}
+      >
         <span>ส่วนลด</span>
         <span class="discount-value">
           -{formatMoney(discountAmount)} ฿ <small>แก้ไข</small>
@@ -443,7 +589,7 @@
   open={showCheckout}
   total={cartTotal}
   {cart}
-  discountAmount={discountAmount}
+  {discountAmount}
   onClose={() => (showCheckout = false)}
   onCompleted={handleSaleCompleted}
 />
@@ -498,7 +644,8 @@
   title={errorModal.title}
   message={errorModal.message}
   details={errorModal.details}
-  onClose={() => (errorModal = { open: false, title: '', message: '', details: '' })}
+  onClose={() =>
+    (errorModal = { open: false, title: "", message: "", details: "" })}
 />
 
 <style>
@@ -577,6 +724,13 @@
     overflow-y: auto;
     align-content: start;
     padding-bottom: var(--space-sm);
+    padding-right: var(--space-sm);
+    transition: opacity 0.15s ease;
+  }
+
+  .product-grid.is-loading {
+    opacity: 0.6;
+    pointer-events: none;
   }
 
   .product-card {
@@ -626,12 +780,23 @@
   }
 
   .product-stock.out-allowed {
-    color: var(--color-accent-warning, #D08770);
+    color: var(--color-accent-warning, #d08770);
     font-weight: 600;
   }
 
   .product-card.stock-allowed {
     border-style: dashed;
+  }
+
+  .pos-pagination-wrapper {
+    flex-shrink: 0;
+    padding-top: var(--space-xs);
+  }
+
+  .pos-pagination-wrapper :global(.pagination-bar) {
+    margin-top: 0;
+    padding-top: var(--space-sm);
+    border-top: var(--border-subtle);
   }
 
   .state-box {
