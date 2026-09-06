@@ -1,5 +1,7 @@
 <script lang="ts">
-  let transactions = $state([
+  import type { StockTransaction } from '$lib/types';
+
+  let transactions = $state<StockTransaction[]>([
     { transaction_id: 'TX001', product_id: 'P001', transaction_type: 'IN', quantity: 50, reference_no: 'PO-2026-08-01', transaction_date: '2026-08-01 10:30' },
     { transaction_id: 'TX002', product_id: 'P002', transaction_type: 'OUT', quantity: 2, reference_no: 'INV-001', transaction_date: '2026-08-02 14:15' },
     { transaction_id: 'TX003', product_id: 'P003', transaction_type: 'ADJUST', quantity: -1, reference_no: 'Damaged goods', transaction_date: '2026-08-03 09:00' },
@@ -11,7 +13,8 @@
     { product_id: 'P003', name: 'Ceramic Mug Set' }
   ]);
 
-  function getProductName(product_id: string): string {
+  function getProductName(product_id: string | null): string {
+    if (!product_id) return '-';
     return products.find(p => p.product_id === product_id)?.name ?? product_id;
   }
 </script>

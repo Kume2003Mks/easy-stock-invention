@@ -116,12 +116,18 @@
           <label for="cash-input">รับเงินมา (บาท)</label>
           <input
             id="cash-input"
-            type="number"
+            type="text"
+            inputmode="decimal"
             class="input-field cash-input"
-            min="0"
-            step="1"
-            placeholder={String(total)}
+            placeholder="0.00"
             bind:value={cashInput}
+            oninput={(e) => {
+              const val = e.currentTarget.value;
+              const sanitized = val.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');
+              if (val !== sanitized) {
+                cashInput = sanitized;
+              }
+            }}
             onkeydown={(e) => {
               if (e.key === 'Enter') confirmPayment();
             }}
@@ -133,12 +139,16 @@
             <button
               type="button"
               class="btn-outline quick-btn"
-              onclick={() => (cashInput = String((Number(cashInput) || 0) + amount))}
+              onclick={() => (cashInput = String(amount))}
             >
-              +{amount}
+              {amount}
             </button>
           {/each}
-          <button type="button" class="btn-outline quick-btn exact" onclick={() => (cashInput = String(total))}>
+          <button
+            type="button"
+            class="btn-outline quick-btn exact"
+            onclick={() => (cashInput = total.toFixed(2))}
+          >
             ยอดตรง
           </button>
         </div>

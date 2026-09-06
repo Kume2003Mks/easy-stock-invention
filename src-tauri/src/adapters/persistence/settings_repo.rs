@@ -20,6 +20,9 @@ pub const DEFAULT_SETTINGS: &[(&str, &str, &str)] = &[
     ("printer_connection", "none", "ประเภทการเชื่อมต่อเครื่องพิมพ์ (none/usb/network)"),
     ("printer_target", "", "ที่อยู่เครื่องพิมพ์ เช่น 192.168.1.200:9100 หรือชื่อเครื่องพิมพ์"),
     ("promptpay_id", "", "เลข PromptPay สำหรับ QR บนใบเสร็จ"),
+    ("promptpay_qr_enabled", "false", "เปิด/ปิดการพิมพ์ QR พร้อมเพย์บนใบเสร็จ"),
+    ("printer_codepage", "26", "ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"),
+    ("receipt_font", "sarabun", "รูปแบบฟอนต์ใบเสร็จ (sarabun=กราฟิกบิตแมปความคมชัดสูง, device=ฟอนต์เครื่องพิมพ์)"),
 ];
 
 /// Insert default settings if they do not exist yet.

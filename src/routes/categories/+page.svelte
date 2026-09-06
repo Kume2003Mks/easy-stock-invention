@@ -7,11 +7,7 @@
   import Pagination from '$lib/components/Pagination.svelte';
   import ErrorModal from '$lib/components/ErrorModal.svelte';
   import { parseAppError } from '$lib/utils/errorHandler';
-
-  interface Category {
-    category_id: string;
-    name: string;
-  }
+  import type { Category } from '$lib/types';
 
   let categories = $state<Category[]>([]);
   let loading = $state(true);

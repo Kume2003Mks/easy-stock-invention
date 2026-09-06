@@ -8,8 +8,10 @@
   import DiscountModal from '$lib/components/pos/DiscountModal.svelte';
   import ReturnModal from '$lib/components/pos/ReturnModal.svelte';
   import ReceiptPreviewModal from '$lib/components/pos/ReceiptPreviewModal.svelte';
+  import Dropdown from '$lib/components/Dropdown.svelte';
   import { parseAppError } from '$lib/utils/errorHandler';
   import type {
+    AppSettings,
     CartItem,
     CategoryForPos,
     Order,
@@ -23,7 +25,13 @@
   let loadError = $state('');
 
   let search = $state('');
-  let activeCategory = $state<string>('all');
+  let activeCategory = $state<string | number>('all');
+
+  const categoryOptions = $derived([
+    { value: 'all', label: 'ทั้งหมด' },
+    { value: 'none', label: 'ไม่มีหมวดหมู่' },
+    ...categories.map((c) => ({ value: c.category_id, label: c.name })),
+  ]);
 
   // ---------- ตะกร้า ----------
   let cart = $state<CartItem[]>([]);
@@ -58,14 +66,7 @@
       const data = (await invoke('get_products_data', {
         params: { page: 1, pageSize: 500 },
       })) as {
-        products: Array<{
-          product_id: string;
-          barcode: string | null;
-          name: string;
-          category_id: string | null;
-          selling_price: number;
-          current_stock: number;
-        }>;
+        products: ProductForPos[];
         categories: CategoryForPos[];
       };
       products = data.products;
@@ -90,10 +91,7 @@
   onMount(async () => {
     await Promise.all([loadProducts(), loadHeldCount()]);
     try {
-      const settings = (await invoke('get_settings')) as {
-        receipt_preview_enabled: string;
-        allow_out_of_stock_sale?: string;
-      };
+      const settings = (await invoke('get_settings')) as AppSettings;
       receiptPreviewEnabled = settings.receipt_preview_enabled !== 'false';
       allowOutOfStockSale = settings.allow_out_of_stock_sale === 'true';
     } catch {
@@ -105,9 +103,11 @@
   // ---------- Derived ----------
   const filteredProducts = $derived.by(() => {
     const term = search.trim().toLowerCase();
+    const cat = String(activeCategory);
     return products.filter((p) => {
       const matchCat =
-        activeCategory === 'all' || p.category_id === activeCategory;
+        cat === 'all' ||
+        (cat === 'none' ? !p.category_id : p.category_id === cat);
       const matchTerm =
         !term ||
         p.name.toLowerCase().includes(term) ||
@@ -309,25 +309,13 @@
         class="input-field search-input"
         placeholder="สแกนบาร์โค้ด / ค้นหาสินค้า (F2)"
       />
-    </div>
-
-    <div class="category-chips">
-      <button
-        type="button"
-        class="chip {activeCategory === 'all' ? 'active' : ''}"
-        onclick={() => (activeCategory = 'all')}
-      >
-        ทั้งหมด
-      </button>
-      {#each categories as cat (cat.category_id)}
-        <button
-          type="button"
-          class="chip {activeCategory === cat.category_id ? 'active' : ''}"
-          onclick={() => (activeCategory = cat.category_id)}
-        >
-          {cat.name}
-        </button>
-      {/each}
+      <Dropdown
+        id="pos-category-filter"
+        label="หมวดหมู่:"
+        options={categoryOptions}
+        bind:value={activeCategory}
+        minWidth="160px"
+      />
     </div>
 
     {#if loading}
@@ -569,32 +557,14 @@
 
   .search-row {
     display: flex;
+    gap: var(--space-md);
+    align-items: center;
   }
 
   .search-input {
     font-size: 16px;
-  }
-
-  .category-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-  }
-
-  .chip {
-    padding: 6px 14px;
-    border: var(--border-subtle);
-    border-radius: 100px;
-    font-size: 13px;
-    background-color: var(--color-surface);
-    transition: all 0.15s ease;
-  }
-
-  .chip.active {
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-surface);
-    font-weight: 500;
+    flex: 1;
+    min-width: 200px;
   }
 
   .product-grid {

@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'Sarabun';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/printer/Sarabun-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Sarabun';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/printer/Sarabun-Bold.ttf') format('truetype');
+}
+
 :root {
   /* Color Palette */
   --color-primary: #5E81AC;

@@ -26,6 +26,8 @@ struct ReceiptSettings {
     printer_connection: String,
     printer_target: String,
     promptpay_id: Option<String>,
+    printer_codepage: u8,
+    receipt_font: String,
 }
 
 impl Default for ReceiptSettings {
@@ -40,6 +42,8 @@ impl Default for ReceiptSettings {
             printer_connection: "network".to_string(),
             printer_target: String::new(),
             promptpay_id: None,
+            printer_codepage: 26,
+            receipt_font: "sarabun".to_string(),
         }
     }
 }
@@ -70,7 +74,18 @@ fn load_receipt_settings(conn: &Connection) -> ReceiptSettings {
     if let Some(v) = get("printer_target") {
         s.printer_target = v;
     }
-    s.promptpay_id = get("promptpay_id").filter(|v| !v.trim().is_empty());
+    let qr_enabled = get("promptpay_qr_enabled").map(|v| v == "true").unwrap_or(false);
+    s.promptpay_id = if qr_enabled {
+        get("promptpay_id").filter(|v| !v.trim().is_empty())
+    } else {
+        None
+    };
+    if let Some(v) = get("printer_codepage") {
+        s.printer_codepage = v.parse::<u8>().unwrap_or(26);
+    }
+    if let Some(v) = get("receipt_font") {
+        s.receipt_font = v;
+    }
     s
 }
 
@@ -101,6 +116,8 @@ fn build_receipt_data(order: &Order, s: &ReceiptSettings) -> ReceiptData {
         note: order.note.clone(),
         promptpay_id: s.promptpay_id.clone(),
         paper_size: s.paper_size,
+        codepage: s.printer_codepage,
+        receipt_font: s.receipt_font.clone(),
     }
 }
 
@@ -298,11 +315,65 @@ pub fn print_receipt(state: State<'_, Mutex<Connection>>, order_id: String) -> R
     PrintReceiptUseCase::execute(port.as_ref(), &data).map_err(AppError::Printer)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TestPrintPayload {
+    pub printer_connection: Option<String>,
+    pub printer_target: Option<String>,
+    pub paper_size: Option<String>,
+    pub promptpay_id: Option<String>,
+    pub promptpay_qr_enabled: Option<String>,
+    pub store_name: Option<String>,
+    pub store_address: Option<String>,
+    pub store_phone: Option<String>,
+    pub printer_codepage: Option<String>,
+    pub receipt_font: Option<String>,
+}
+
 /// ทดสอบการเชื่อมต่อเครื่องพิมพ์ — พิมพ์สลิปทดสอบสั้น ๆ จากหน้า Settings
 #[tauri::command]
-pub fn print_test_receipt(state: State<'_, Mutex<Connection>>) -> Result<(), AppError> {
+pub fn print_test_receipt(
+    state: State<'_, Mutex<Connection>>,
+    payload: Option<TestPrintPayload>,
+) -> Result<(), AppError> {
     let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-    let settings = load_receipt_settings(&conn);
+    let mut settings = load_receipt_settings(&conn);
+
+    if let Some(p) = payload {
+        if let Some(c) = p.printer_connection {
+            settings.printer_connection = c;
+        }
+        if let Some(t) = p.printer_target {
+            settings.printer_target = t;
+        }
+        if let Some(s) = p.paper_size {
+            settings.paper_size = PaperSize::from_setting(&s);
+        }
+        if let Some(pp) = p.promptpay_id {
+            settings.promptpay_id = if pp.trim().is_empty() { None } else { Some(pp) };
+        }
+        if let Some(qr_en) = p.promptpay_qr_enabled {
+            if qr_en == "false" {
+                settings.promptpay_id = None;
+            }
+        }
+        if let Some(n) = p.store_name {
+            if !n.trim().is_empty() {
+                settings.store_name = n;
+            }
+        }
+        if let Some(a) = p.store_address {
+            settings.store_address = a;
+        }
+        if let Some(ph) = p.store_phone {
+            settings.store_phone = ph;
+        }
+        if let Some(cp) = p.printer_codepage {
+            settings.printer_codepage = cp.parse::<u8>().unwrap_or(26);
+        }
+        if let Some(rf) = p.receipt_font {
+            settings.receipt_font = rf;
+        }
+    }
 
     let conn_type = PrinterConnection::from_setting(&settings.printer_connection);
     if conn_type == PrinterConnection::None {
@@ -335,8 +406,10 @@ pub fn print_test_receipt(state: State<'_, Mutex<Connection>>) -> Result<(), App
         paid_amount: 0.0,
         change_amount: 0.0,
         note: Some("สลิปทดสอบเครื่องพิมพ์ใบเสร็จ".to_string()),
-        promptpay_id: None,
+        promptpay_id: settings.promptpay_id.clone(),
         paper_size: settings.paper_size,
+        codepage: settings.printer_codepage,
+        receipt_font: settings.receipt_font.clone(),
     };
 
     PrintReceiptUseCase::execute(port.as_ref(), &data).map_err(AppError::Printer)

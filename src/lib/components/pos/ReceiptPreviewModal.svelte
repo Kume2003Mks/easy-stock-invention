@@ -4,7 +4,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import ErrorModal from '$lib/components/ErrorModal.svelte';
   import { parseAppError } from '$lib/utils/errorHandler';
-  import type { Order } from '$lib/types';
+  import type { Order, StoreSettings } from '$lib/types';
 
   let {
     open = false,
@@ -16,13 +16,8 @@
     onClose?: () => void;
   } = $props();
 
-  interface StoreSettings {
-    store_name: string;
-    store_address: string;
-    store_phone: string;
-  }
-
   let store = $state<StoreSettings>({ store_name: 'Easy Stock', store_address: '', store_phone: '' });
+  let receiptFont = $state('sarabun');
   let printing = $state(false);
   let printSuccess = $state(false);
 
@@ -30,7 +25,9 @@
 
   onMount(async () => {
     try {
-      store = (await invoke('get_settings')) as unknown as StoreSettings;
+      const res = (await invoke('get_settings')) as any;
+      store = res as StoreSettings;
+      receiptFont = res.receipt_font || 'sarabun';
     } catch {
       // ใช้ค่าเริ่มต้นหากโหลด settings ไม่ได้
     }
@@ -76,7 +73,7 @@
 <Modal {open} title="ตัวอย่างใบเสร็จ" onClose={onClose} maxWidth="420px">
   <div class="preview-content">
     {#if order}
-      <div class="receipt-paper">
+      <div class="receipt-paper {receiptFont === 'sarabun' ? 'font-sarabun' : 'font-device'}">
         <div class="receipt-center receipt-store">{store.store_name}</div>
         {#if store.store_address}
           <div class="receipt-center receipt-muted">{store.store_address}</div>
@@ -164,10 +161,17 @@
     border: 1px dashed var(--color-muted);
     border-radius: var(--radius-md);
     padding: var(--space-lg);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 13px;
     line-height: 1.7;
     color: #2e3440;
+  }
+
+  .receipt-paper.font-sarabun {
+    font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .receipt-paper.font-device {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   .receipt-center {

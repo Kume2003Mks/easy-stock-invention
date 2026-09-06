@@ -29,6 +29,14 @@ pub struct SettingsPayload {
     pub printer_connection: String,
     pub printer_target: String,
     pub promptpay_id: String,
+    #[serde(default = "default_false")]
+    pub promptpay_qr_enabled: String,
+    #[serde(default = "default_codepage_str")]
+    pub printer_codepage: String,
+}
+
+fn default_codepage_str() -> String {
+    "26".to_string()
 }
 
 impl Default for SettingsPayload {
@@ -49,6 +57,8 @@ impl Default for SettingsPayload {
             printer_connection: "none".to_string(),
             printer_target: String::new(),
             promptpay_id: String::new(),
+            promptpay_qr_enabled: "false".to_string(),
+            printer_codepage: "26".to_string(),
         }
     }
 }
@@ -110,6 +120,12 @@ pub fn get_settings(state: State<'_, Mutex<Connection>>) -> Result<SettingsPaylo
     if let Some(v) = settings_repo::get_setting(&conn, "promptpay_id")? {
         payload.promptpay_id = v;
     }
+    if let Some(v) = settings_repo::get_setting(&conn, "promptpay_qr_enabled")? {
+        payload.promptpay_qr_enabled = v;
+    }
+    if let Some(v) = settings_repo::get_setting(&conn, "printer_codepage")? {
+        payload.printer_codepage = v;
+    }
 
     Ok(payload)
 }
@@ -137,6 +153,8 @@ pub fn save_settings(
     settings_repo::upsert_setting(&conn, "printer_connection", &payload.printer_connection, Some("ประเภทการเชื่อมต่อเครื่องพิมพ์ (network/usb)"))?;
     settings_repo::upsert_setting(&conn, "printer_target", &payload.printer_target, Some("ที่อยู่เครื่องพิมพ์ เช่น 192.168.1.200:9100 หรือชื่อเครื่องพิมพ์"))?;
     settings_repo::upsert_setting(&conn, "promptpay_id", &payload.promptpay_id, Some("เลข PromptPay สำหรับ QR บนใบเสร็จ"))?;
+    settings_repo::upsert_setting(&conn, "promptpay_qr_enabled", &payload.promptpay_qr_enabled, Some("เปิด/ปิดการพิมพ์ QR พร้อมเพย์บนใบเสร็จ"))?;
+    settings_repo::upsert_setting(&conn, "printer_codepage", &payload.printer_codepage, Some("ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"))?;
 
     Ok(())
 }

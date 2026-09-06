@@ -9,41 +9,12 @@
   import ErrorModal from "$lib/components/ErrorModal.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
   import { getCurrencySymbol, formatCurrency } from "$lib/utils/currency";
-
-  interface Product {
-    product_id: string;
-    barcode: string | null;
-    name: string;
-    category_id: string | null;
-    supplier_id: string | null;
-    cost_price: number;
-    selling_price: number;
-    wholesale_price: number;
-    current_stock: number;
-    reorder_level: number;
-  }
-
-  interface Category {
-    category_id: string;
-    name: string;
-  }
-
-  interface Supplier {
-    supplier_id: string;
-    name: string;
-    contact_info: string | null;
-  }
-
-  interface ProductsPageData {
-    products: Product[];
-    totalItems: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-    categories: Category[];
-    suppliers: Supplier[];
-    currency?: string;
-  }
+  import type {
+    Category,
+    Product,
+    ProductsPageData,
+    Supplier,
+  } from "$lib/types";
 
   let products = $state<Product[]>([]);
   let categories = $state<Category[]>([]);

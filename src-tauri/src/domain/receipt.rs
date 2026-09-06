@@ -35,8 +35,8 @@ impl PaperSize {
     /// ขนาดจุด (module size) สำหรับ QR Code — ปรับตามหน้ากว้างกระดาษ
     pub fn qr_module_size(&self) -> usize {
         match self {
-            PaperSize::Mm80 => 4,
-            PaperSize::Mm58 | PaperSize::Mm57 => 3,
+            PaperSize::Mm80 => 6,
+            PaperSize::Mm58 | PaperSize::Mm57 => 4,
         }
     }
 }
@@ -70,6 +70,20 @@ pub struct ReceiptData {
     /// เลข PromptPay สำหรับสร้าง QR บนสลิป (ถ้ามี)
     pub promptpay_id: Option<String>,
     pub paper_size: PaperSize,
+    /// Code page สำหรับภาษาไทย (ค่าเริ่มต้น 26 = TIS18 บน Epson)
+    #[serde(default = "default_codepage")]
+    pub codepage: u8,
+    /// รูปแบบฟอนต์ใบเสร็จ ("sarabun" หรือ "device")
+    #[serde(default = "default_receipt_font")]
+    pub receipt_font: String,
+}
+
+fn default_codepage() -> u8 {
+    26
+}
+
+fn default_receipt_font() -> String {
+    "sarabun".to_string()
 }
 
 /// Trait พอร์ตเครื่องพิมพ์ — Implementation อยู่ที่ Infrastructure Layer

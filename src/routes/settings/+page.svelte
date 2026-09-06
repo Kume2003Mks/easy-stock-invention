@@ -5,6 +5,7 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import ErrorModal from "$lib/components/ErrorModal.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
+  import type { AppSettings, SystemPrintersResponse } from "$lib/types";
   // Store settings state
   let storeName = $state("Easy Stock");
   let storeAddress = $state("");
@@ -21,8 +22,17 @@
   let lowStockAlert = $state(true);
   let dailyReport = $state(false);
 
-  // Save state
-  let saved = $state(false);
+  // Toast notification state
+  let toastMessage = $state<string | null>(null);
+  let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function showToast(message: string) {
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastMessage = message;
+    toastTimeout = setTimeout(() => {
+      toastMessage = null;
+    }, 3000);
+  }
 
   // Printer settings (เครื่องพิมพ์ใบเสร็จ)
   let autoPrintEnabled = $state(true);
@@ -31,7 +41,22 @@
   let printerConnection = $state("none");
   let printerTarget = $state("");
   let promptpayId = $state("");
+  let promptpayQrEnabled = $state(false);
+  let printerCodepage = $state("26");
+  let receiptFont = $state("sarabun");
   let testingPrint = $state(false);
+
+  const receiptFontOptions = [
+    { value: "sarabun", label: "ฟอนต์ Sarabun (ค่าเริ่มต้น)" },
+    { value: "device", label: "ฟอนต์เครื่องพิมพ์ (โหมดข้อความ)" },
+  ];
+
+  const codepageOptions = [
+    { value: "26", label: "TIS-18 (Code 26) - ค่าเริ่มต้น" },
+    { value: "21", label: "TIS-11 (Code 21) - ทั่วไป" },
+    { value: "255", label: "CP874 (Code 255) - OEM" },
+    { value: "20", label: "KU42 (Code 20) - แบบเดิม" },
+  ];
 
   // System printers detection state
   let systemPrinters = $state<string[]>([]);
@@ -44,7 +69,10 @@
 
   const paperSizeOptions = ["80", "58", "57"];
   const printerConnectionOptions = [
-    { value: "none", label: "ไม่ระบุเครื่องพิมพ์ (ไม่มีเครื่องพิมพ์ / ไม่ใช้งาน)" },
+    {
+      value: "none",
+      label: "ไม่ระบุเครื่องพิมพ์ (ไม่มีเครื่องพิมพ์ / ไม่ใช้งาน)",
+    },
     { value: "usb", label: "ต่อตรงกับเครื่อง (USB / ไดรเวอร์ในระบบ)" },
     { value: "network", label: "เครือข่าย (Network TCP 9100)" },
   ];
@@ -64,10 +92,9 @@
   async function loadSystemPrinters() {
     loadingPrinters = true;
     try {
-      const res = (await invoke("get_system_printers")) as {
-        printers: string[];
-        default_printer: string | null;
-      };
+      const res = (await invoke(
+        "get_system_printers",
+      )) as SystemPrintersResponse;
       systemPrinters = res.printers || [];
       defaultSystemPrinter = res.default_printer || null;
       syncUsbSelection();
@@ -148,23 +175,7 @@
     try {
       loadSystemPrinters();
 
-      const result = (await invoke("get_settings")) as {
-        store_name: string;
-        store_address: string;
-        store_phone: string;
-        store_email: string;
-        currency: string;
-        low_stock_threshold: string;
-        low_stock_alert: string;
-        daily_report: string;
-        allow_out_of_stock_sale?: string;
-        auto_print_enabled: string;
-        receipt_preview_enabled: string;
-        paper_size: string;
-        printer_connection: string;
-        printer_target: string;
-        promptpay_id: string;
-      };
+      const result = (await invoke("get_settings")) as AppSettings;
 
       storeName = result.store_name;
       storeAddress = result.store_address;
@@ -181,6 +192,11 @@
       printerConnection = result.printer_connection || "none";
       printerTarget = result.printer_target || "";
       promptpayId = result.promptpay_id || "";
+      promptpayQrEnabled = result.promptpay_qr_enabled
+        ? result.promptpay_qr_enabled === "true"
+        : Boolean(result.promptpay_id?.trim());
+      printerCodepage = result.printer_codepage || "26";
+      receiptFont = result.receipt_font || "sarabun";
 
       syncUsbSelection();
     } catch (e) {
@@ -208,8 +224,8 @@
             ? printerTarget
             : selectedUsbPrinter
           : printerConnection === "network"
-          ? printerTarget
-          : "";
+            ? printerTarget
+            : "";
 
       await invoke("save_settings", {
         payload: {
@@ -222,18 +238,20 @@
           low_stock_alert: String(lowStockAlert),
           daily_report: String(dailyReport),
           allow_out_of_stock_sale: String(allowOutOfStockSale),
-          auto_print_enabled: String(printerConnection !== "none" && autoPrintEnabled),
+          auto_print_enabled: String(
+            printerConnection !== "none" && autoPrintEnabled,
+          ),
           receipt_preview_enabled: String(receiptPreviewEnabled),
           paper_size: paperSize,
           printer_connection: printerConnection,
           printer_target: targetToSave,
           promptpay_id: promptpayId,
+          promptpay_qr_enabled: String(promptpayQrEnabled),
+          printer_codepage: printerCodepage,
+          receipt_font: receiptFont,
         },
       });
-      saved = true;
-      setTimeout(() => {
-        saved = false;
-      }, 3000);
+      showToast("บันทึกการตั้งค่าเรียบร้อยแล้ว");
     } catch (e) {
       loadError = String(e);
     }
@@ -244,7 +262,19 @@
       errorModal = {
         open: true,
         title: "ไม่ได้เชื่อมต่อเครื่องพิมพ์",
-        message: "ระบบตั้งค่าอยู่ในโหมดไม่ระบุเครื่องพิมพ์ กรุณาเลือกประเภทการเชื่อมต่อเครื่องพิมพ์ (เช่น USB หรือ เครือข่าย) ก่อนทำการทดสอบ",
+        message:
+          "ระบบตั้งค่าอยู่ในโหมดไม่ระบุเครื่องพิมพ์ กรุณาเลือกประเภทการเชื่อมต่อเครื่องพิมพ์ (เช่น USB หรือ เครือข่าย) ก่อนทำการทดสอบ",
+        details: "",
+      };
+      return;
+    }
+
+    if (printerConnection === "network" && !printerTarget.trim()) {
+      errorModal = {
+        open: true,
+        title: "ยังไม่ได้ระบุที่อยู่เครื่องพิมพ์",
+        message:
+          "กรุณาระบุที่อยู่ IP และ Port ของเครื่องพิมพ์เครือข่าย (เช่น 192.168.1.200:9100) ก่อนทำการทดสอบ",
         details: "",
       };
       return;
@@ -252,20 +282,44 @@
 
     testingPrint = true;
     try {
-      await invoke("print_test_receipt");
+      const targetToTest =
+        printerConnection === "usb"
+          ? isManualUsb
+            ? printerTarget
+            : selectedUsbPrinter
+          : printerConnection === "network"
+            ? printerTarget
+            : "";
+
+      await invoke("print_test_receipt", {
+        payload: {
+          printer_connection: printerConnection,
+          printer_target: targetToTest,
+          paper_size: paperSize,
+          promptpay_id: promptpayId,
+          promptpay_qr_enabled: String(promptpayQrEnabled),
+          store_name: storeName,
+          store_address: storeAddress,
+          store_phone: storePhone,
+          printer_codepage: printerCodepage,
+          receipt_font: receiptFont,
+        },
+      });
       errorModal = {
         open: false,
         title: "",
         message: "",
         details: "",
       };
-      saved = true;
-      setTimeout(() => {
-        saved = false;
-      }, 3000);
+      showToast("สั่งพิมพ์ใบเสร็จทดสอบเรียบร้อยแล้ว");
     } catch (e) {
       const parsed = parseAppError(e, "ทดสอบพิมพ์ไม่สำเร็จ");
-      errorModal = { open: true, title: parsed.title, message: parsed.message, details: parsed.details ?? "" };
+      errorModal = {
+        open: true,
+        title: parsed.title,
+        message: parsed.message,
+        details: parsed.details ?? "",
+      };
     } finally {
       testingPrint = false;
     }
@@ -344,20 +398,36 @@
 
         {#if printerConnection === "none"}
           <div class="printer-none-notice">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
             <div>
               <strong>โหมดไม่ระบุเครื่องพิมพ์</strong>
-              <p>สำหรับร้านค้าที่ไม่มีเครื่องพิมพ์ หรือยังไม่ต้องการพิมพ์ใบเสร็จ ระบบจะปิดการพิมพ์อัตโนมัติ โดยยังสามารถดูตัวอย่างใบเสร็จบนหน้าจอ POS ได้ตามปกติ</p>
+              <p>
+                สำหรับร้านค้าที่ไม่มีเครื่องพิมพ์ หรือยังไม่ต้องการพิมพ์ใบเสร็จ
+                ระบบจะปิดการพิมพ์อัตโนมัติ โดยยังสามารถดูตัวอย่างใบเสร็จบนหน้าจอ
+                POS ได้ตามปกติ
+              </p>
             </div>
           </div>
         {/if}
 
         <div class="checkbox-group">
-          <label class="checkbox-label" class:disabled-label={printerConnection === "none"}>
+          <label
+            class="checkbox-label"
+            class:disabled-label={printerConnection === "none"}
+          >
             <input
               type="checkbox"
               bind:checked={autoPrintEnabled}
@@ -385,7 +455,9 @@
         {#if printerConnection === "usb"}
           <div class="form-group">
             <div class="label-with-action">
-              <label for="usb-printer-select">เลือกเครื่องพิมพ์ที่ติดตั้งในเครื่อง</label>
+              <label for="usb-printer-select"
+                >เลือกเครื่องพิมพ์ที่ติดตั้งในเครื่อง</label
+              >
               <button
                 type="button"
                 class="btn-text-action"
@@ -422,19 +494,23 @@
 
           {#if isManualUsb}
             <div class="form-group">
-              <label for="printer-target">ชื่อเครื่องพิมพ์ที่ติดตั้งในระบบ</label>
+              <label for="printer-target"
+                >ชื่อเครื่องพิมพ์ที่ติดตั้งในระบบ</label
+              >
               <input
                 id="printer-target"
                 type="text"
                 class="input-field"
                 bind:value={printerTarget}
-                placeholder="เช่น EPSON TM-T82X-II หรือ POS-80"
+                placeholder="เช่น POS-80 หรือ Thermal Printer"
               />
             </div>
           {/if}
         {:else if printerConnection === "network"}
           <div class="form-group">
-            <label for="printer-target">ที่อยู่เครื่องพิมพ์เครือข่าย (IP:Port)</label>
+            <label for="printer-target"
+              >ที่อยู่เครื่องพิมพ์เครือข่าย (IP:Port)</label
+            >
             <input
               id="printer-target"
               type="text"
@@ -450,26 +526,76 @@
             <Dropdown
               id="paper-size"
               label="ขนาดกระดาษ (มม.)"
-              options={paperSizeOptions.map((s) => ({ value: s, label: `${s} มม.` }))}
+              options={paperSizeOptions.map((s) => ({
+                value: s,
+                label: `${s} มม.`,
+              }))}
               bind:value={paperSize}
               minWidth="100%"
             />
           </div>
+
+          <div class="form-group">
+            <Dropdown
+              id="receipt-font"
+              label="รูปแบบฟอนต์ใบเสร็จ"
+              options={receiptFontOptions}
+              bind:value={receiptFont}
+              minWidth="100%"
+            />
+            <span class="form-hint">
+              {receiptFont === "sarabun"
+                ? "โหมดกราฟิกความคมชัดสูง เรนเดอร์สระและวรรณยุกต์ไทยเรียงตัวสวยงาม 100%"
+                : "โหมดข้อความดั้งเดิม พิมพ์เร็วที่สุดผ่านชิปฮาร์ดแวร์เครื่องพิมพ์"}
+            </span>
+          </div>
+
+          {#if receiptFont === "device"}
+            <div class="form-group">
+              <Dropdown
+                id="printer-codepage"
+                label="รหัสภาษาไทย (Code Page)"
+                options={codepageOptions}
+                bind:value={printerCodepage}
+                minWidth="100%"
+              />
+            </div>
+          {/if}
         {/if}
 
-        <div class="form-group">
-          <label for="promptpay-id">เลข PromptPay สำหรับ QR บนใบเสร็จ (ไม่บังคับ)</label>
-          <input
-            id="promptpay-id"
-            type="text"
-            class="input-field"
-            bind:value={promptpayId}
-            placeholder="เบอร์โทร 10 หลัก / เลขบัตรประชาชน 13 หลัก"
-          />
-        </div>
+        {#if printerConnection !== "none"}
+          <div
+            class="checkbox-group"
+            style="margin-top: 4px; margin-bottom: 4px;"
+          >
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={promptpayQrEnabled} />
+              <span>พิมพ์ QR พร้อมเพย์บนใบเสร็จ</span>
+            </label>
+          </div>
+
+          {#if promptpayQrEnabled}
+            <div class="form-group">
+              <label for="promptpay-id">เลข PromptPay สำหรับ QR บนใบเสร็จ</label
+              >
+              <input
+                id="promptpay-id"
+                type="text"
+                class="input-field"
+                bind:value={promptpayId}
+                placeholder="เบอร์โทร 10 หลัก / เลขบัตรประชาชน 13 หลัก"
+              />
+            </div>
+          {/if}
+        {/if}
 
         {#if printerConnection !== "none"}
-          <button type="button" class="btn-outline" onclick={testPrint} disabled={testingPrint}>
+          <button
+            type="button"
+            class="btn-outline"
+            onclick={testPrint}
+            disabled={testingPrint}
+          >
             {testingPrint ? "กำลังพิมพ์..." : "ทดสอบการพิมพ์"}
           </button>
         {/if}
@@ -482,8 +608,13 @@
           <label class="checkbox-label checkbox-label-block">
             <input type="checkbox" bind:checked={allowOutOfStockSale} />
             <div class="checkbox-text">
-              <span class="checkbox-title">อนุญาตให้ขายสินค้าได้เมื่อสินค้าหมดสต๊อก</span>
-              <p class="checkbox-desc">เมื่อเปิดใช้งาน ระบบจะอนุญาตให้ขายสินค้าต่อไปได้แม้สต็อกจะเหลือ 0 หรือติดลบ</p>
+              <span class="checkbox-title"
+                >อนุญาตให้ขายสินค้าได้เมื่อสินค้าหมดสต๊อก</span
+              >
+              <p class="checkbox-desc">
+                เมื่อเปิดใช้งาน ระบบจะอนุญาตให้ขายสินค้าต่อไปได้แม้สต็อกจะเหลือ
+                0 หรือติดลบ
+              </p>
             </div>
           </label>
           <label class="checkbox-label">
@@ -493,7 +624,9 @@
         </div>
         {#if lowStockAlert}
           <div class="form-group">
-            <label for="low-stock-threshold">ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือน (ชิ้น)</label>
+            <label for="low-stock-threshold"
+              >ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือน (ชิ้น)</label
+            >
             <input
               id="low-stock-threshold"
               type="number"
@@ -522,8 +655,22 @@
     </div>
   {/if}
 
-  {#if saved}
-    <div class="save-toast">บันทึกการตั้งค่าเรียบร้อยแล้ว</div>
+  {#if toastMessage}
+    <div class="save-toast">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+      <span>{toastMessage}</span>
+    </div>
   {/if}
 </div>
 
@@ -543,7 +690,8 @@
   title={errorModal.title}
   message={errorModal.message}
   details={errorModal.details}
-  onClose={() => (errorModal = { open: false, title: "", message: "", details: "" })}
+  onClose={() =>
+    (errorModal = { open: false, title: "", message: "", details: "" })}
 />
 
 <style>
@@ -591,7 +739,7 @@
     cursor: pointer;
   }
 
-  .checkbox-label input[type='checkbox'] {
+  .checkbox-label input[type="checkbox"] {
     width: 18px;
     height: 18px;
     accent-color: var(--color-primary);
@@ -679,11 +827,15 @@
     right: var(--space-xl);
     background-color: var(--color-accent-success);
     color: var(--color-surface);
-    padding: 12px 24px;
+    padding: 12px 20px;
     border-radius: var(--radius-md);
     font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     animation: fadeIn 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   @keyframes fadeIn {
@@ -724,6 +876,14 @@
     margin: 0;
     font-size: 13px;
     opacity: 0.75;
+    line-height: 1.4;
+  }
+
+  .form-hint {
+    display: block;
+    font-size: 12px;
+    opacity: 0.7;
+    margin-top: 4px;
     line-height: 1.4;
   }
 
