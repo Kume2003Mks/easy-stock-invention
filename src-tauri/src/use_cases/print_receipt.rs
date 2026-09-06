@@ -12,8 +12,8 @@ const LF: u8 = 0x0A;
 /// ค่าเริ่มต้น 26 (TIS18 3-pass บน Epson TM Series)
 pub const DEFAULT_CODEPAGE: u8 = 26;
 
-pub const SARABUN_REGULAR_BYTES: &[u8] = include_bytes!("../../../static/fonts/printer/Sarabun-Regular.ttf");
-pub const SARABUN_BOLD_BYTES: &[u8] = include_bytes!("../../../static/fonts/printer/Sarabun-Bold.ttf");
+pub const SARABUN_REGULAR_BYTES: &[u8] = include_bytes!("../../../static/fonts/printer/Saraban/Sarabun-Regular.ttf");
+pub const SARABUN_BOLD_BYTES: &[u8] = include_bytes!("../../../static/fonts/printer/Saraban/Sarabun-Bold.ttf");
 
 #[cfg(target_os = "windows")]
 pub mod gdi_raster {

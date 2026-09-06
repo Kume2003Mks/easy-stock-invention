@@ -55,8 +55,8 @@
   let saving = $state(false);
 
   const receiptFontOptions = [
-    { value: "sarabun", label: "ฟอนต์ Sarabun (ค่าเริ่มต้น - คมชัดสูง)" },
-    { value: "device", label: "ฟอนต์เครื่องพิมพ์ (โหมดข้อความฮาร์ดแวร์)" },
+    { value: "sarabun", label: "ฟอนต์ Sarabun (ค่าเริ่มต้น)" },
+    { value: "device", label: "ฟอนต์ในตัวเครื่องพิมพ์ (พิมพ์เร็ว)" },
   ];
 
   const codepageOptions = [

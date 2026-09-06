@@ -3,7 +3,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/printer/Sarabun-Regular.ttf') format('truetype');
+  src: url('/fonts/printer/Saraban/Sarabun-Regular.ttf') format('truetype');
 }
 
 @font-face {
@@ -11,7 +11,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/fonts/printer/Sarabun-Bold.ttf') format('truetype');
+  src: url('/fonts/printer/Saraban/Sarabun-Bold.ttf') format('truetype');
 }
 
 :root {
