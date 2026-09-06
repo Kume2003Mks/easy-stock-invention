@@ -39,5 +39,5 @@ This project focuses on Desktop platforms (**Windows** and **Linux**). Ensure an
 1. **Do Not Mix Package Managers**: Never execute `npm install`, `yarn install`, or `pnpm install` in a Bun project. This creates multiple lockfiles and will cause inconsistency.
 2. **Execute Commands via Cwd**: Always run commands from the workspace root where `package.json` is located.
 3. **Verify Configuration**:
-   - The Tauri configuration is located in [tauri.conf.json](file:///d:/Project/hikariel/src-tauri/tauri.conf.json).
-   - Verify that the `beforeDevCommand` and `beforeBuildCommand` in [tauri.conf.json](file:///d:/Project/hikariel/src-tauri/tauri.conf.json) also use Bun (e.g., `bun run dev` and `bun run build`).
+   - The Tauri configuration is located in [src-tauri/tauri.conf.json](../../../src-tauri/tauri.conf.json).
+   - Verify that the `beforeDevCommand` and `beforeBuildCommand` in [src-tauri/tauri.conf.json](../../../src-tauri/tauri.conf.json) also use Bun (e.g., `bun run dev` and `bun run build`).
