@@ -57,13 +57,53 @@ export function parseAppError(err: unknown, defaultTitle = 'เกิดข้�
   }
 
   if (
-    rawMsg.includes('จำนวนสต็อกไม่เพียงพอ') ||
     rawMsg.includes('สต็อกไม่เพียงพอ') ||
     rawMsg.includes('สต็อกมีเพียง')
   ) {
     return {
       title: 'สต็อกไม่เพียงพอ',
       message: rawMsg.replace('Validation error:', '').trim(),
+      details: rawMsg,
+    };
+  }
+
+  // เครื่องพิมพ์ใบเสร็จ (ERR_PRINTER_OFFLINE / Printer error)
+  if (
+    rawMsg.includes('ERR_PRINTER_OFFLINE') ||
+    rawMsg.includes('Printer error')
+  ) {
+    return {
+      title: 'เครื่องพิมพ์ใบเสร็จมีปัญหา',
+      message: rawMsg
+        .replace('Printer error:', '')
+        .replace(/ERR_PRINTER_OFFLINE:\s*/g, '')
+        .trim() || 'ไม่สามารถพิมพ์ใบเสร็จได้ กรุณาตรวจสอบการตั้งค่าเครื่องพิมพ์',
+      details: rawMsg,
+    };
+  }
+
+  // รับคืนสินค้า (RB)
+  if (rawMsg.includes('คืนเกินจำนวนที่ขาย')) {
+    return {
+      title: 'คืนสินค้าเกินจำนวน',
+      message: rawMsg.replace('Validation error:', '').trim(),
+      details: rawMsg,
+    };
+  }
+
+  if (rawMsg.includes('คืนสินค้าได้เฉพาะบิลขาย')) {
+    return {
+      title: 'ไม่สามารถรับคืนได้',
+      message: rawMsg.replace('Validation error:', '').trim(),
+      details: rawMsg,
+    };
+  }
+
+  // ค้นหาบิลไม่เจอ
+  if (rawMsg.includes('ไม่พบบิลเลขที่') || rawMsg.includes('ไม่พบบิลที่ระบุ')) {
+    return {
+      title: 'ไม่พบบิลในระบบ',
+      message: rawMsg,
       details: rawMsg,
     };
   }

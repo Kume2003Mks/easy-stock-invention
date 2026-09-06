@@ -13,28 +13,28 @@ pub const DEFAULT_SETTINGS: &[(&str, &str, &str)] = &[
     ("low_stock_threshold", "10", "ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือน"),
     ("low_stock_alert", "true", "เปิด/ปิดการแจ้งเตือนสต็อกต่ำ"),
     ("daily_report", "false", "เปิด/ปิดรายงานสรุปประจำวัน"),
+    ("allow_out_of_stock_sale", "false", "อนุญาตให้ขายสินค้าได้เมื่อสินค้าหมดสต๊อก"),
+    ("auto_print_enabled", "true", "พิมพ์ใบเสร็จอัตโนมัติหลังชำระเงิน"),
+    ("receipt_preview_enabled", "true", "แสดงตัวอย่างใบเสร็จก่อนพิมพ์"),
+    ("paper_size", "80", "ขนาดกระดาษใบเสร็จ (80/58/57 มม.)"),
+    ("printer_connection", "none", "ประเภทการเชื่อมต่อเครื่องพิมพ์ (none/usb/network)"),
+    ("printer_target", "", "ที่อยู่เครื่องพิมพ์ เช่น 192.168.1.200:9100 หรือชื่อเครื่องพิมพ์"),
+    ("promptpay_id", "", "เลข PromptPay สำหรับ QR บนใบเสร็จ"),
 ];
 
-/// Insert default settings if the App_Settings table is empty (first launch).
-/// Uses a single transaction to ensure all rows are inserted atomically.
+/// Insert default settings if they do not exist yet.
+/// Uses a single transaction with INSERT OR IGNORE to ensure all defaults exist
+/// even when new settings are added to existing databases.
 pub fn ensure_default_settings(conn: &Connection) -> Result<(), AppError> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM App_Settings",
-        [],
-        |row| row.get(0),
-    )?;
-
-    if count == 0 {
-        let tx = conn.unchecked_transaction()?;
-        for (key, value, description) in DEFAULT_SETTINGS {
-            tx.execute(
-                "INSERT OR IGNORE INTO App_Settings (setting_key, setting_value, description, updated_at)
-                 VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)",
-                rusqlite::params![key, value, description],
-            )?;
-        }
-        tx.commit()?;
+    let tx = conn.unchecked_transaction()?;
+    for (key, value, description) in DEFAULT_SETTINGS {
+        tx.execute(
+            "INSERT OR IGNORE INTO App_Settings (setting_key, setting_value, description, updated_at)
+             VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)",
+            rusqlite::params![key, value, description],
+        )?;
     }
+    tx.commit()?;
 
     Ok(())
 }

@@ -3,6 +3,7 @@ use tauri::Manager;
 
 pub mod adapters;
 pub mod domain;
+pub mod use_cases;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -36,6 +37,18 @@ pub fn run() {
             adapters::commands::create_supplier,
             adapters::commands::update_supplier,
             adapters::commands::delete_supplier,
+            // POS — ขาย / พักบิล / คืนสินค้า (RB) / พิมพ์ใบเสร็จ
+            adapters::commands::create_order,
+            adapters::commands::hold_order,
+            adapters::commands::get_held_orders,
+            adapters::commands::delete_held_order,
+            adapters::commands::get_orders,
+            adapters::commands::get_order_detail,
+            adapters::commands::get_order_by_no,
+            adapters::commands::create_return_order,
+            adapters::commands::print_receipt,
+            adapters::commands::print_test_receipt,
+            adapters::commands::get_system_printers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
