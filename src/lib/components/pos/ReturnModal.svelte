@@ -7,10 +7,12 @@
 
   let {
     open = false,
+    currencySymbol = '฿',
     onClose = () => {},
     onCompleted = (_order: Order) => {},
   }: {
     open?: boolean;
+    currencySymbol?: string;
     onClose?: () => void;
     onCompleted?: (order: Order) => void;
   } = $props();
@@ -153,7 +155,7 @@
       <div class="order-summary">
         <div class="summary-row"><span>เลขที่บิล</span><strong>{originalOrder.order_no}</strong></div>
         <div class="summary-row"><span>วันที่ขาย</span><span>{originalOrder.order_date}</span></div>
-        <div class="summary-row"><span>ยอดขายรวม</span><strong>{formatMoney(originalOrder.total_amount)} ฿</strong></div>
+        <div class="summary-row"><span>ยอดขายรวม</span><strong>{formatMoney(originalOrder.total_amount)} {currencySymbol}</strong></div>
       </div>
 
       <!-- ขั้นตอน 2: เลือกรายการคืน -->
@@ -168,7 +170,7 @@
             <div class="item-info">
               <span class="item-name">{row.product_name}</span>
               <span class="item-meta">
-                ขาย {row.sold} ชิ้น · ราคา {formatMoney(row.unit_price)} ฿
+                ขาย {row.sold} ชิ้น · ราคา {formatMoney(row.unit_price)} {currencySymbol}
                 {#if row.returned > 0}
                   · คืนไปแล้ว {row.returned} ชิ้น
                 {/if}
@@ -211,7 +213,7 @@
       <div class="return-footer">
         <div class="return-total">
           <span>ยอดคืนเงินรวม</span>
-          <strong>{formatMoney(returnTotal)} ฿</strong>
+          <strong>{formatMoney(returnTotal)} {currencySymbol}</strong>
         </div>
         <div class="footer-actions">
           <button type="button" class="btn-outline" onclick={onClose} disabled={processing}>

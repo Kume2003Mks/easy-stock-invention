@@ -3,10 +3,12 @@
 
   let {
     items = [],
-    periodType = 'daily'
+    periodType = 'daily',
+    currencySymbol = '฿'
   }: {
     items: SalesSummaryBreakdownItem[];
     periodType: string;
+    currencySymbol?: string;
   } = $props();
 
   let hoveredIndex = $state<number | null>(null);
@@ -211,7 +213,7 @@
           <div class="tooltip-header">{formatLabel(it.period, periodType)} ({it.period})</div>
           <div class="tooltip-row">
             <span class="tooltip-label">ยอดขาย:</span>
-            <span class="tooltip-val highlight">฿{formatCurrency(it.totalSales)}</span>
+            <span class="tooltip-val highlight">{currencySymbol}{formatCurrency(it.totalSales)}</span>
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">จำนวนบิล:</span>
@@ -219,7 +221,7 @@
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">เฉลี่ยต่อบิล:</span>
-            <span class="tooltip-val">฿{formatCurrency(it.averageOrderValue)}</span>
+            <span class="tooltip-val">{currencySymbol}{formatCurrency(it.averageOrderValue)}</span>
           </div>
         </div>
       {/if}

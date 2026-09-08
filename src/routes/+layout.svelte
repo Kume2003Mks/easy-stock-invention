@@ -1,7 +1,14 @@
 <script lang="ts">
   import "../app.css";
+  import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { fetchSystemCurrency } from "$lib/stores/settings";
+
   let { children } = $props();
+
+  onMount(() => {
+    fetchSystemCurrency();
+  });
 
   const navItems = [
     { href: "/pos", name: "หน้าร้าน POS", icon: "pos" },

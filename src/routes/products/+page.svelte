@@ -9,6 +9,7 @@
   import ErrorModal from "$lib/components/ErrorModal.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
   import { getCurrencySymbol, formatCurrency } from "$lib/utils/currency";
+  import { currencyStore, updateSystemCurrency } from "$lib/stores/settings";
   import type {
     Category,
     Product,
@@ -125,6 +126,9 @@
       categories = data.categories ?? [];
       suppliers = data.suppliers ?? [];
       currency = data.currency ?? "THB";
+      if (data.currency) {
+        updateSystemCurrency(data.currency);
+      }
     } catch (err) {
       console.error("Failed to load products data:", err);
       loadError = String(err);
@@ -142,9 +146,17 @@
   });
 
   onMount(() => {
+    const unsub = currencyStore.subscribe((c) => {
+      if (c) currency = c;
+    });
+
     loadProductsData().then(() => {
       isMounted = true;
     });
+
+    return () => {
+      unsub();
+    };
   });
 
   function handleSearchInput() {

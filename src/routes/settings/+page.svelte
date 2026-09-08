@@ -6,6 +6,12 @@
   import Modal from "$lib/components/Modal.svelte";
   import ErrorModal from "$lib/components/ErrorModal.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
+  import {
+    SUPPORTED_CURRENCIES,
+    getCurrencySymbol,
+    getCurrencyName,
+  } from "$lib/utils/currency";
+  import { updateSystemCurrency } from "$lib/stores/settings";
   import type { AppSettings, SystemPrintersResponse } from "$lib/types";
 
   type SettingCategory = "store" | "printer" | "stock" | "system";
@@ -21,7 +27,12 @@
 
   // Currency settings
   let currency = $state("THB");
-  const currencyOptions = ["THB", "USD", "EUR", "JPY", "CNY"];
+  const currencyDropdownOptions = SUPPORTED_CURRENCIES.map((c) => ({
+    value: c.code,
+    label: `${c.code} (${c.symbol}) - ${c.nameTh}`,
+  }));
+  let currentCurrencySymbol = $derived(getCurrencySymbol(currency));
+  let currentCurrencyName = $derived(getCurrencyName(currency));
 
   // Stock & Sales settings
   let allowOutOfStockSale = $state(false);
@@ -391,6 +402,7 @@
 
       syncUsbSelection();
       savedSnapshot = takeSnapshot();
+      updateSystemCurrency(currency);
     } catch (e) {
       loadError = String(e);
     } finally {
@@ -440,6 +452,10 @@
       });
 
       savedSnapshot = takeSnapshot();
+
+      if (cat === "system") {
+        updateSystemCurrency(currency);
+      }
 
       const messages: Record<SettingCategory, string> = {
         store: "บันทึกข้อมูลร้านค้าเรียบร้อยแล้ว",
@@ -603,7 +619,7 @@
                   : `เครื่องพิมพ์เครือข่าย (${paperSize} มม.)`}
             </span>
             <span class="badge badge-secondary">
-              สกุลเงิน: {currency}
+              สกุลเงิน: {currency} ({currentCurrencySymbol})
             </span>
             {#if allowOutOfStockSale}
               <span class="badge badge-accent">อนุญาตขายสินค้าหมด</span>
@@ -794,7 +810,8 @@
             <div class="category-text-block">
               <span class="category-title">การตั้งค่าระบบ</span>
               <span class="category-desc"
-                >สกุลเงินที่ใช้ในระบบ ({currency}) และการตั้งค่าพื้นฐาน</span
+                >สกุลเงินที่ใช้ในระบบ ({currency} - {currentCurrencySymbol})
+                และการตั้งค่าพื้นฐาน</span
               >
             </div>
             {#if isCategoryDirty("system")}
@@ -1450,13 +1467,45 @@
                     <Dropdown
                       id="currency"
                       label=""
-                      options={currencyOptions.map((c) => ({
-                        value: c,
-                        label: c,
-                      }))}
+                      options={currencyDropdownOptions}
                       bind:value={currency}
                       minWidth="100%"
                     />
+                  </div>
+                </div>
+
+                <!-- Currency Visual Preview Card -->
+                <div class="fluent-row currency-preview-row">
+                  <div class="currency-preview-card">
+                    <div class="currency-preview-badge">
+                      <span class="preview-symbol">{currentCurrencySymbol}</span
+                      >
+                    </div>
+                    <div class="currency-preview-details">
+                      <div class="currency-preview-header">
+                        <strong class="currency-preview-title"
+                          >{currency} ({currentCurrencySymbol})</strong
+                        >
+                        <span class="currency-preview-subtitle"
+                          >{currentCurrencyName}</span
+                        >
+                      </div>
+                      <div class="currency-preview-examples">
+                        <span class="example-tag">
+                          ตัวอย่างราคา: <strong
+                            >{currentCurrencySymbol}1,250.00</strong
+                          >
+                        </span>
+                        <span class="example-tag">
+                          หรือ <strong>1,250.00 {currentCurrencySymbol}</strong>
+                        </span>
+                      </div>
+                      <p class="currency-preview-hint">
+                        หน้าร้าน POS, รายงานสรุปยอดขาย,
+                        และสินค้าคงคลังจะแสดงผลด้วยสัญลักษณ์ "{currentCurrencySymbol}"
+                        ตามการตั้งค่านี้
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2228,5 +2277,95 @@
       max-width: 100%;
       align-items: flex-start;
     }
+  }
+
+  /* Currency Preview Card */
+  .currency-preview-row {
+    padding: 8px;
+    background-color: var(--color-background);
+    border-radius: var(--radius-md);
+  }
+
+  .currency-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .currency-preview-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    background: linear-gradient(135deg, #e8f0fe 0%, #d2e3fc 100%);
+    border: 1px solid #aecbfa;
+    border-radius: var(--radius-md);
+    color: var(--color-primary);
+  }
+
+  .preview-symbol {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .currency-preview-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .currency-preview-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .currency-preview-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .currency-preview-subtitle {
+    font-size: 14px;
+    color: var(--color-muted);
+  }
+
+  .currency-preview-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .example-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: 100px;
+    font-size: 13px;
+    color: var(--color-text-primary);
+  }
+
+  .example-tag strong {
+    margin-left: 4px;
+    color: var(--color-primary);
+  }
+
+  .currency-preview-hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--color-muted);
   }
 </style>

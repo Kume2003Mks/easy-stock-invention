@@ -11,6 +11,8 @@
   import Dropdown from "$lib/components/Dropdown.svelte";
   import Pagination from "$lib/components/Pagination.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
+  import { getCurrencySymbol } from "$lib/utils/currency";
+  import { currencyStore, fetchSystemCurrency } from "$lib/stores/settings";
   import type {
     AppSettings,
     CartItem,
@@ -23,6 +25,8 @@
   // ---------- ข้อมูลสินค้า & แบ่งหน้าหลังบ้าน ----------
   let products = $state<ProductForPos[]>([]);
   let categories = $state<CategoryForPos[]>([]);
+  let currency = $state("THB");
+  let currencySymbol = $derived(getCurrencySymbol(currency));
   let loading = $state(true);
   let loadError = $state("");
   let totalItems = $state(0);
@@ -112,17 +116,28 @@
     loadProducts();
   });
 
-  onMount(async () => {
-    await Promise.all([loadProducts(), loadHeldCount()]);
-    isMounted = true;
-    try {
-      const settings = (await invoke("get_settings")) as AppSettings;
-      receiptPreviewEnabled = settings.receipt_preview_enabled !== "false";
-      allowOutOfStockSale = settings.allow_out_of_stock_sale === "true";
-    } catch {
-      receiptPreviewEnabled = true;
-      allowOutOfStockSale = false;
-    }
+  onMount(() => {
+    const unsub = currencyStore.subscribe((c) => {
+      if (c) currency = c;
+    });
+
+    (async () => {
+      await Promise.all([loadProducts(), loadHeldCount(), fetchSystemCurrency()]);
+      isMounted = true;
+      try {
+        const settings = (await invoke("get_settings")) as AppSettings;
+        receiptPreviewEnabled = settings.receipt_preview_enabled !== "false";
+        allowOutOfStockSale = settings.allow_out_of_stock_sale === "true";
+        if (settings.currency) currency = settings.currency;
+      } catch {
+        receiptPreviewEnabled = true;
+        allowOutOfStockSale = false;
+      }
+    })();
+
+    return () => {
+      unsub();
+    };
   });
 
   function handleSearchInput() {
@@ -432,7 +447,7 @@
           >
             <span class="product-name">{product.name}</span>
             <span class="product-price"
-              >{formatMoney(product.selling_price)} ฿</span
+              >{formatMoney(product.selling_price)} {currencySymbol}</span
             >
             <span
               class="product-stock {product.current_stock <= 0
@@ -485,7 +500,7 @@
             <div class="cart-item-info">
               <span class="cart-item-name">{item.product_name}</span>
               <span class="cart-item-price"
-                >{formatMoney(item.unit_price)} ฿</span
+                >{formatMoney(item.unit_price)} {currencySymbol}</span
               >
             </div>
             <div class="cart-item-controls">
@@ -505,7 +520,7 @@
             </div>
             <div class="cart-item-right">
               <span class="cart-item-total"
-                >{formatMoney(item.unit_price * item.quantity)} ฿</span
+                >{formatMoney(item.unit_price * item.quantity)} {currencySymbol}</span
               >
               <button
                 type="button"
@@ -539,16 +554,16 @@
       >
         <span>ส่วนลด</span>
         <span class="discount-value">
-          -{formatMoney(discountAmount)} ฿ <small>แก้ไข</small>
+          -{formatMoney(discountAmount)} {currencySymbol} <small>แก้ไข</small>
         </span>
       </button>
       <div class="summary-row">
         <span>รวมย่อย</span>
-        <span>{formatMoney(cartSubtotal)} ฿</span>
+        <span>{formatMoney(cartSubtotal)} {currencySymbol}</span>
       </div>
       <div class="summary-total">
         <span>ยอดสุทธิ</span>
-        <strong>{formatMoney(cartTotal)} ฿</strong>
+        <strong>{formatMoney(cartTotal)} {currencySymbol}</strong>
       </div>
 
       <div class="cart-actions-grid">
@@ -579,7 +594,7 @@
         onclick={() => (showCheckout = true)}
       >
         <span>ชำระเงิน (Space / Enter)</span>
-        <span class="pay-amount">{formatMoney(cartTotal)} ฿</span>
+        <span class="pay-amount">{formatMoney(cartTotal)} {currencySymbol}</span>
       </button>
     </div>
   </aside>
@@ -590,12 +605,15 @@
   total={cartTotal}
   {cart}
   {discountAmount}
+  {currency}
+  {currencySymbol}
   onClose={() => (showCheckout = false)}
   onCompleted={handleSaleCompleted}
 />
 
 <HoldOrdersModal
   open={showHold}
+  {currencySymbol}
   onClose={() => (showHold = false)}
   onRecall={recallHeld}
 />
@@ -604,6 +622,7 @@
   open={showDiscount}
   subtotal={cartSubtotal}
   initialDiscount={discountAmount}
+  {currencySymbol}
   onCancel={() => (showDiscount = false)}
   onConfirm={(amount) => {
     discountAmount = amount;
@@ -613,6 +632,7 @@
 
 <ReturnModal
   open={showReturn}
+  {currencySymbol}
   onClose={() => (showReturn = false)}
   onCompleted={(order) => {
     loadProducts();

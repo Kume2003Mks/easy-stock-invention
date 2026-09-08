@@ -10,6 +10,8 @@
     total = 0,
     cart = [] as CartItem[],
     discountAmount = 0,
+    currency = 'THB',
+    currencySymbol = '฿',
     onClose = () => {},
     onCompleted = (_order: Order) => {},
   }: {
@@ -17,6 +19,8 @@
     total?: number;
     cart?: CartItem[];
     discountAmount?: number;
+    currency?: string;
+    currencySymbol?: string;
     onClose?: () => void;
     onCompleted?: (order: Order) => void;
   } = $props();
@@ -90,7 +94,7 @@
   <div class="checkout-content">
     <div class="total-banner">
       <span>ยอดที่ต้องชำระ</span>
-      <strong>{formatMoney(normalizedTotal)} ฿</strong>
+      <strong>{formatMoney(normalizedTotal)} {currencySymbol}</strong>
     </div>
 
     <div class="method-row">
@@ -120,7 +124,7 @@
     {#if paymentMethod === 'CASH'}
       <div class="cash-section">
         <div class="form-group">
-          <label for="cash-input">รับเงินมา (บาท)</label>
+          <label for="cash-input">รับเงินมา ({currencySymbol})</label>
           <input
             id="cash-input"
             type="text"
@@ -162,12 +166,12 @@
 
         <div class="change-row {canPay ? 'ready' : ''}">
           <span>เงินทอน</span>
-          <strong>{formatMoney(change)} ฿</strong>
+          <strong>{formatMoney(change)} {currencySymbol}</strong>
         </div>
       </div>
     {:else}
       <div class="qr-note">
-        ยืนยันการชำระผ่าน{paymentMethod === 'PROMPTPAY' ? ' PromptPay' : ' การโอนเงิน'}ยอด {formatMoney(normalizedTotal)} ฿
+        ยืนยันการชำระผ่าน{paymentMethod === 'PROMPTPAY' ? ' PromptPay' : ' การโอนเงิน'}ยอด {formatMoney(normalizedTotal)} {currencySymbol}
       </div>
     {/if}
 
@@ -181,7 +185,7 @@
         onclick={confirmPayment}
         disabled={!canPay || processing}
       >
-        {processing ? 'กำลังบันทึก...' : `ยืนยันชำระเงิน ${formatMoney(normalizedTotal)} ฿`}
+        {processing ? 'กำลังบันทึก...' : `ยืนยันชำระเงิน ${formatMoney(normalizedTotal)} ${currencySymbol}`}
       </button>
     </div>
   </div>

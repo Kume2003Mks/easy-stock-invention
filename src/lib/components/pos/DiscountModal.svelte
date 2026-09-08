@@ -5,12 +5,14 @@
     open = false,
     subtotal = 0,
     initialDiscount = 0,
+    currencySymbol = '฿',
     onCancel = () => {},
     onConfirm = (_discount: number) => {},
   }: {
     open?: boolean;
     subtotal?: number;
     initialDiscount?: number;
+    currencySymbol?: string;
     onCancel?: () => void;
     onConfirm?: (discount: number) => void;
   } = $props();
@@ -35,11 +37,11 @@
   <div class="discount-content">
     <div class="subtotal-row">
       <span>ยอดรวมก่อนส่วนลด</span>
-      <strong>{subtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿</strong>
+      <strong>{subtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })} {currencySymbol}</strong>
     </div>
 
     <div class="form-group">
-      <label for="discount-amount">ส่วนลด (บาท)</label>
+      <label for="discount-amount">ส่วนลด ({currencySymbol})</label>
       <input
         id="discount-amount"
         type="number"

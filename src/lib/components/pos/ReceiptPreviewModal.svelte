@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-  import { onMount, onDestroy } from 'svelte';
-  import Modal from '$lib/components/Modal.svelte';
-  import ErrorModal from '$lib/components/ErrorModal.svelte';
-  import { parseAppError } from '$lib/utils/errorHandler';
-  import type { Order, StoreSettings } from '$lib/types';
+  import { invoke } from "@tauri-apps/api/core";
+  import { onMount, onDestroy } from "svelte";
+  import Modal from "$lib/components/Modal.svelte";
+  import ErrorModal from "$lib/components/ErrorModal.svelte";
+  import { parseAppError } from "$lib/utils/errorHandler";
+  import type { Order, StoreSettings } from "$lib/types";
 
   let {
     open = false,
@@ -16,22 +16,27 @@
     onClose?: () => void;
   } = $props();
 
-  let store = $state<StoreSettings>({ store_name: 'Easy Stock', store_address: '', store_phone: '' });
-  let receiptFont = $state('sarabun');
+  let store = $state<StoreSettings>({
+    store_name: "Easy Stock",
+    store_address: "",
+    store_phone: "",
+  });
+  let receiptFont = $state("sarabun");
   let autoPrintEnabled = $state(false);
   let printing = $state(false);
   let printSuccess = $state(false);
   let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
   let lastAutoPrintedOrderId = $state<string | null>(null);
 
-  let errorModal = $state({ open: false, title: '', message: '', details: '' });
+  let errorModal = $state({ open: false, title: "", message: "", details: "" });
 
   async function loadSettings() {
     try {
-      const res = (await invoke('get_settings')) as any;
+      const res = (await invoke("get_settings")) as any;
       store = res as StoreSettings;
-      receiptFont = res.receipt_font || 'sarabun';
-      autoPrintEnabled = res.auto_print_enabled !== 'false' && res.printer_connection !== 'none';
+      receiptFont = res.receipt_font || "sarabun";
+      autoPrintEnabled =
+        res.auto_print_enabled !== "false" && res.printer_connection !== "none";
     } catch {
       // ใช้ค่าเริ่มต้นหากโหลด settings ไม่ได้
     }
@@ -75,29 +80,29 @@
   $effect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Enter' && !printing && !printSuccess) {
+      if (e.key === "Enter" && !printing && !printSuccess) {
         e.preventDefault();
         printReceipt();
       }
     }
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   });
 
   function formatMoney(n: number): string {
-    return n.toLocaleString('th-TH', { minimumFractionDigits: 2 });
+    return n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
   }
 
   function paymentLabel(method: string): string {
     switch (method) {
-      case 'PROMPTPAY':
-        return 'พร้อมเพย์';
-      case 'TRANSFER':
-        return 'โอนเงิน';
+      case "PROMPTPAY":
+        return "พร้อมเพย์";
+      case "TRANSFER":
+        return "โอนเงิน";
       default:
-        return 'เงินสด';
+        return "เงินสด";
     }
   }
 
@@ -105,7 +110,7 @@
     if (!order || printing) return;
     printing = true;
     try {
-      await invoke('print_receipt', { orderId: order.order_id });
+      await invoke("print_receipt", { orderId: order.order_id });
       printSuccess = true;
 
       // ปิด modal อัตโนมัติหลังพิมพ์สำเร็จ 1.2 วินาที
@@ -114,8 +119,13 @@
         handleClose();
       }, 1200);
     } catch (e) {
-      const parsed = parseAppError(e, 'พิมพ์ใบเสร็จไม่สำเร็จ');
-      errorModal = { open: true, title: parsed.title, message: parsed.message, details: parsed.details ?? '' };
+      const parsed = parseAppError(e, "พิมพ์ใบเสร็จไม่สำเร็จ");
+      errorModal = {
+        open: true,
+        title: parsed.title,
+        message: parsed.message,
+        details: parsed.details ?? "",
+      };
     } finally {
       printing = false;
     }
@@ -125,43 +135,74 @@
 <Modal {open} title="ตัวอย่างใบเสร็จ" onClose={handleClose} maxWidth="420px">
   <div class="preview-content">
     {#if order}
-      <div class="receipt-paper {receiptFont === 'sarabun' ? 'font-sarabun' : 'font-device'}">
+      <div
+        class="receipt-paper {receiptFont === 'sarabun'
+          ? 'font-sarabun'
+          : 'font-device'}"
+      >
         <div class="receipt-center receipt-store">{store.store_name}</div>
         {#if store.store_address}
           <div class="receipt-center receipt-muted">{store.store_address}</div>
         {/if}
         {#if store.store_phone}
-          <div class="receipt-center receipt-muted">โทร. {store.store_phone}</div>
+          <div class="receipt-center receipt-muted">
+            โทร. {store.store_phone}
+          </div>
         {/if}
         <div class="receipt-sep"></div>
-        {#if order.order_type === 'RETURN'}
-          <div class="receipt-center receipt-return">** ใบเสร็จรับเงิน (คืนสินค้า) **</div>
+        {#if order.order_type === "RETURN"}
+          <div class="receipt-center receipt-return">
+            ** ใบเสร็จรับเงิน (คืนสินค้า) **
+          </div>
         {/if}
-        <div class="receipt-row"><span>เลขที่</span><span>{order.order_no}</span></div>
-        <div class="receipt-row"><span>วันที่</span><span>{order.order_date}</span></div>
+        <div class="receipt-row">
+          <span>เลขที่</span><span>{order.order_no}</span>
+        </div>
+        <div class="receipt-row">
+          <span>วันที่</span><span>{order.order_date}</span>
+        </div>
         <div class="receipt-sep"></div>
 
         {#each order.items as item (item.item_id)}
           <div class="receipt-item-name">{item.product_name}</div>
           <div class="receipt-row">
-            <span>&nbsp;&nbsp;{item.quantity} x {formatMoney(item.unit_price)}</span>
+            <span
+              >&nbsp;&nbsp;{item.quantity} x {formatMoney(
+                item.unit_price,
+              )}</span
+            >
             <span>{formatMoney(item.line_total)}</span>
           </div>
         {/each}
         <div class="receipt-sep"></div>
 
-        <div class="receipt-row"><span>รวมย่อย</span><span>{formatMoney(order.subtotal)}</span></div>
+        <div class="receipt-row">
+          <span>รวมย่อย</span><span>{formatMoney(order.subtotal)}</span>
+        </div>
         {#if order.discount_amount > 0}
-          <div class="receipt-row"><span>ส่วนลด</span><span>-{formatMoney(order.discount_amount)}</span></div>
+          <div class="receipt-row">
+            <span>ส่วนลด</span><span>-{formatMoney(order.discount_amount)}</span
+            >
+          </div>
         {/if}
-        <div class="receipt-row receipt-total"><span>ยอดรวม</span><span>{formatMoney(order.total_amount)}</span></div>
-        <div class="receipt-row"><span>ชำระ ({paymentLabel(order.payment_method)})</span><span>{formatMoney(order.paid_amount)}</span></div>
+        <div class="receipt-row receipt-total">
+          <span>ยอดรวม</span><span>{formatMoney(order.total_amount)}</span>
+        </div>
+        <div class="receipt-row">
+          <span>ชำระ ({paymentLabel(order.payment_method)})</span><span
+            >{formatMoney(order.paid_amount)}</span
+          >
+        </div>
         {#if order.change_amount > 0}
-          <div class="receipt-row"><span>เงินทอน</span><span>{formatMoney(order.change_amount)}</span></div>
+          <div class="receipt-row">
+            <span>เงินทอน</span><span>{formatMoney(order.change_amount)}</span>
+          </div>
         {/if}
         {#if order.note}
           <div class="receipt-sep"></div>
-          <div class="receipt-row"><span>หมายเหตุ</span><span>{order.note}</span></div>
+          <div class="receipt-row">
+            <span>หมายเหตุ</span><span>{order.note}</span>
+          </div>
         {/if}
         <div class="receipt-sep"></div>
         <div class="receipt-center receipt-muted">ขอบคุณที่ใช้บริการ</div>
@@ -170,7 +211,7 @@
       <!-- Action Buttons -->
       <div class="preview-actions">
         <button type="button" class="btn-outline" onclick={handleClose}>
-          ปิด
+          ไม่พิมพ์ใบเสร็จ
         </button>
         <button
           type="button"
@@ -181,7 +222,17 @@
         >
           {#if printing}
             <span class="btn-inner">
-              <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                class="spin"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
                 <polyline points="21 3 21 8 16 8" />
               </svg>
@@ -189,16 +240,36 @@
             </span>
           {:else if printSuccess}
             <span class="btn-inner">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <span>สั่งพิมพ์ใบเสร็จเรียบร้อยแล้ว</span>
             </span>
           {:else}
             <span class="btn-inner">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <polyline points="6 9 6 2 18 2 18 9" />
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <path
+                  d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
+                />
                 <rect x="6" y="14" width="12" height="8" />
               </svg>
               <span>ยืนยันพิมพ์ใบเสร็จ (Enter)</span>
@@ -209,7 +280,16 @@
 
       {#if printSuccess}
         <div class="print-status-banner">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
           <span>สั่งพิมพ์เรียบร้อยแล้ว (กำลังปิดหน้าต่างอัตโนมัติ...)</span>
@@ -224,7 +304,8 @@
   title={errorModal.title}
   message={errorModal.message}
   details={errorModal.details}
-  onClose={() => (errorModal = { open: false, title: '', message: '', details: '' })}
+  onClose={() =>
+    (errorModal = { open: false, title: "", message: "", details: "" })}
 />
 
 <style>
@@ -246,11 +327,18 @@
   }
 
   .receipt-paper.font-sarabun {
-    font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family:
+      "Sarabun",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
   }
 
   .receipt-paper.font-device {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      monospace;
   }
 
   .receipt-center {

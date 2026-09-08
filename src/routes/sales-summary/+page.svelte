@@ -5,6 +5,8 @@
   import DatePicker from "$lib/components/DatePicker.svelte";
   import SalesChart from "$lib/components/sales/SalesChart.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
+  import { getCurrencySymbol } from "$lib/utils/currency";
+  import { currencyStore, fetchSystemCurrency } from "$lib/stores/settings";
   import type {
     SalesSummaryFilter,
     SalesSummaryResult,
@@ -19,6 +21,8 @@
   let loading = $state(false);
   let exporting = $state(false);
   let salesData = $state<SalesSummaryResult | null>(null);
+  let currency = $state("THB");
+  let currencySymbol = $derived(getCurrencySymbol(currency));
   let saveSuccessMessage = $state("");
   let successTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -150,8 +154,8 @@
     const headers = [
       "ช่วงเวลา/วันที่",
       "จำนวนบิล (บิล)",
-      "ยอดขายรวม (บาท)",
-      "ยอดเฉลี่ยต่อบิล (บาท)",
+      `ยอดขายรวม (${currency})`,
+      `ยอดเฉลี่ยต่อบิล (${currency})`,
     ];
     const rows = salesData.breakdown.map((item) => [
       `"${item.period}"`,
@@ -236,7 +240,14 @@
   );
 
   onMount(() => {
+    const unsub = currencyStore.subscribe((c) => {
+      if (c) currency = c;
+    });
+    fetchSystemCurrency();
     applyPreset("today");
+    return () => {
+      unsub();
+    };
   });
 </script>
 
@@ -417,21 +428,11 @@
           <div class="kpi-header">
             <span class="kpi-label">ยอดขายรวมสุทธิ</span>
             <span class="kpi-icon-wrapper sales-icon">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
+              <span class="kpi-symbol-icon">{currencySymbol}</span>
             </span>
           </div>
           <div class="kpi-amount">
-            <span class="currency-symbol">฿</span>{formatCurrency(
+            <span class="currency-symbol">{currencySymbol}</span>{formatCurrency(
               salesData?.kpi.totalSales ?? 0,
             )}
           </div>
@@ -486,7 +487,7 @@
             </span>
           </div>
           <div class="kpi-amount">
-            <span class="currency-symbol">฿</span>{formatCurrency(
+            <span class="currency-symbol">{currencySymbol}</span>{formatCurrency(
               salesData?.kpi.averageOrderValue ?? 0,
             )}
           </div>
@@ -517,7 +518,7 @@
         </div>
 
         <div class="chart-body">
-          <SalesChart items={chartItems} periodType={chartPeriodType} />
+          <SalesChart items={chartItems} periodType={chartPeriodType} {currencySymbol} />
         </div>
       </div>
 
@@ -540,8 +541,8 @@
               <tr>
                 <th>ช่วงเวลา / วันที่</th>
                 <th class="text-right">จำนวนบิล</th>
-                <th class="text-right">ยอดขายรวม (บาท)</th>
-                <th class="text-right">ยอดเฉลี่ยต่อบิล (บาท)</th>
+                <th class="text-right">ยอดขายรวม ({currencySymbol})</th>
+                <th class="text-right">ยอดเฉลี่ยต่อบิล ({currencySymbol})</th>
               </tr>
             </thead>
             <tbody>
@@ -560,10 +561,10 @@
                     </td>
                     <td class="text-right">{row.orderCount} บิล</td>
                     <td class="text-right font-semibold text-primary">
-                      ฿{formatCurrency(row.totalSales)}
+                      {currencySymbol}{formatCurrency(row.totalSales)}
                     </td>
                     <td class="text-right text-muted">
-                      ฿{formatCurrency(row.averageOrderValue)}
+                      {currencySymbol}{formatCurrency(row.averageOrderValue)}
                     </td>
                   </tr>
                 {/each}
@@ -577,10 +578,10 @@
                     >{salesData.kpi.totalOrders} บิล</td
                   >
                   <td class="text-right font-bold text-highlight">
-                    ฿{formatCurrency(salesData.kpi.totalSales)}
+                    {currencySymbol}{formatCurrency(salesData.kpi.totalSales)}
                   </td>
                   <td class="text-right font-bold">
-                    ฿{formatCurrency(salesData.kpi.averageOrderValue)}
+                    {currencySymbol}{formatCurrency(salesData.kpi.averageOrderValue)}
                   </td>
                 </tr>
               </tfoot>
@@ -856,6 +857,12 @@
   .sales-icon {
     background-color: #ebf1f7;
     color: var(--color-primary);
+  }
+
+  .kpi-symbol-icon {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
   }
 
   .orders-icon {

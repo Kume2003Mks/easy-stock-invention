@@ -8,10 +8,12 @@
 
   let {
     open = false,
+    currencySymbol = '฿',
     onClose = () => {},
     onRecall = (_order: Order) => {},
   }: {
     open?: boolean;
+    currencySymbol?: string;
     onClose?: () => void;
     onRecall?: (order: Order) => void;
   } = $props();
@@ -107,7 +109,7 @@
             </div>
           </div>
           <div class="held-actions">
-            <span class="held-total">{order.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} ฿</span>
+            <span class="held-total">{order.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} {currencySymbol}</span>
             <button type="button" class="btn-primary recall-btn" onclick={() => recall(order)}>
               เรียกคืน
             </button>
