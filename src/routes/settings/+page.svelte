@@ -53,6 +53,7 @@
   }
 
   // Printer settings (เครื่องพิมพ์ใบเสร็จ)
+  let printBehavior = $state<"direct" | "preview" | "none">("direct");
   let autoPrintEnabled = $state(true);
   let receiptPreviewEnabled = $state(true);
   let paperSize = $state("80");
@@ -154,6 +155,9 @@
     printerConnection = String(val);
     if (printerConnection === "none") {
       autoPrintEnabled = false;
+      if (printBehavior === "direct") {
+        printBehavior = "preview";
+      }
     } else if (printerConnection === "usb") {
       if (!printerTarget || printerTarget === "") {
         printerTarget = "default";
@@ -190,7 +194,8 @@
     if (lowStockAlert) {
       const val = Number(lowStockThreshold);
       if (isNaN(val) || val < 1) {
-        errors.low_stock_threshold = "ระดับสต็อกขั้นต่ำต้องเริ่มต้นจาก 1 ชิ้นขึ้นไป";
+        errors.low_stock_threshold =
+          "ระดับสต็อกขั้นต่ำต้องเริ่มต้นจาก 1 ชิ้นขึ้นไป";
       }
     }
     formErrors = { ...formErrors, ...errors };
@@ -208,6 +213,7 @@
     lowStockThreshold: number;
     lowStockAlert: boolean;
     dailyReport: boolean;
+    printBehavior: "direct" | "preview" | "none";
     autoPrintEnabled: boolean;
     receiptPreviewEnabled: boolean;
     paperSize: string;
@@ -234,6 +240,7 @@
       lowStockThreshold,
       lowStockAlert,
       dailyReport,
+      printBehavior,
       autoPrintEnabled,
       receiptPreviewEnabled,
       paperSize,
@@ -260,6 +267,7 @@
     }
     if (cat === "printer") {
       return (
+        printBehavior !== savedSnapshot.printBehavior ||
         autoPrintEnabled !== savedSnapshot.autoPrintEnabled ||
         receiptPreviewEnabled !== savedSnapshot.receiptPreviewEnabled ||
         paperSize !== savedSnapshot.paperSize ||
@@ -295,6 +303,7 @@
       storeEmail = savedSnapshot.storeEmail;
       clearFieldError("store_name");
     } else if (cat === "printer") {
+      printBehavior = savedSnapshot.printBehavior;
       autoPrintEnabled = savedSnapshot.autoPrintEnabled;
       receiptPreviewEnabled = savedSnapshot.receiptPreviewEnabled;
       paperSize = savedSnapshot.paperSize;
@@ -397,12 +406,33 @@
       storeEmail = result.store_email || "";
       currency = result.currency || "THB";
       const parsedThreshold = Number(result.low_stock_threshold);
-      lowStockThreshold = !isNaN(parsedThreshold) && parsedThreshold >= 1 ? parsedThreshold : 10;
+      lowStockThreshold =
+        !isNaN(parsedThreshold) && parsedThreshold >= 1 ? parsedThreshold : 10;
       lowStockAlert = result.low_stock_alert === "true";
       dailyReport = result.daily_report === "true";
       allowOutOfStockSale = result.allow_out_of_stock_sale === "true";
-      autoPrintEnabled = result.auto_print_enabled !== "false";
-      receiptPreviewEnabled = result.receipt_preview_enabled !== "false";
+      if (result.print_behavior) {
+        printBehavior = result.print_behavior as "direct" | "preview" | "none";
+      } else if (
+        result.auto_print_enabled === "true" &&
+        result.receipt_preview_enabled === "false"
+      ) {
+        printBehavior = "direct";
+      } else if (
+        result.receipt_preview_enabled === "true" &&
+        result.auto_print_enabled === "false"
+      ) {
+        printBehavior = "preview";
+      } else if (
+        result.receipt_preview_enabled === "false" &&
+        result.auto_print_enabled === "false"
+      ) {
+        printBehavior = "none";
+      } else {
+        printBehavior = "direct";
+      }
+      autoPrintEnabled = printBehavior === "direct";
+      receiptPreviewEnabled = printBehavior === "preview";
       paperSize = result.paper_size || "80";
       printerConnection = result.printer_connection || "none";
       printerTarget = result.printer_target || "";
@@ -453,10 +483,11 @@
           low_stock_alert: String(lowStockAlert),
           daily_report: String(dailyReport),
           allow_out_of_stock_sale: String(allowOutOfStockSale),
+          print_behavior: printBehavior,
           auto_print_enabled: String(
-            printerConnection !== "none" && autoPrintEnabled,
+            printerConnection !== "none" && printBehavior === "direct",
           ),
-          receipt_preview_enabled: String(receiptPreviewEnabled),
+          receipt_preview_enabled: String(printBehavior === "preview"),
           paper_size: paperSize,
           printer_connection: printerConnection,
           printer_target: targetToSave,
@@ -1062,50 +1093,110 @@
             <div class="fluent-section-card">
               <div class="section-card-header">
                 <div class="section-card-title-group">
-                  <h3>พฤติกรรมการพิมพ์</h3>
-                  <p>กำหนดการพิมพ์อัตโนมัติและการแสดงตัวอย่างก่อนพิมพ์</p>
+                  <h3>พฤติกรรมการพิมพ์ใบเสร็จ</h3>
+                  <p>
+                    กำหนดรูปแบบการทำงานของระบบเมื่อรับชำระเงินหรือทำรายการขายสำเร็จ
+                  </p>
                 </div>
               </div>
 
-              <div class="fluent-rows-group">
-                <div class="fluent-row fluent-row-action">
-                  <div class="fluent-row-info">
-                    <span class="fluent-row-title">พิมพ์ใบเสร็จอัตโนมัติ</span>
-                    <span class="fluent-row-desc"
-                      >สั่งพิมพ์ใบเสร็จผ่านเครื่องพิมพ์ทันทีเมื่อรับชำระเงินสำเร็จ</span
-                    >
+              <div class="print-behavior-list">
+                <!-- Option 1: Direct Print -->
+                <label
+                  class="choice-card"
+                  class:selected={printBehavior === "direct"}
+                  class:disabled={printerConnection === "none"}
+                >
+                  <div class="choice-radio">
+                    <input
+                      type="radio"
+                      name="print-behavior"
+                      value="direct"
+                      checked={printBehavior === "direct"}
+                      disabled={printerConnection === "none"}
+                      onchange={() => (printBehavior = "direct")}
+                    />
+                    <div class="radio-indicator"></div>
                   </div>
-                  <div class="fluent-row-control">
-                    <label class="toggle-switch">
-                      <input
-                        type="checkbox"
-                        bind:checked={autoPrintEnabled}
-                        disabled={printerConnection === "none"}
-                      />
-                      <span class="toggle-slider"></span>
-                    </label>
+                  <div class="choice-content">
+                    <div class="choice-header">
+                      <span class="choice-title"
+                        >พิมพ์ทันทีอัตโนมัติ (Fast Checkout)</span
+                      >
+                      {#if printerConnection === "none"}
+                        <span class="choice-badge badge-warning"
+                          >ต้องเชื่อมต่อเครื่องพิมพ์</span
+                        >
+                      {:else}
+                        <span class="choice-badge badge-primary">แนะนำ</span>
+                      {/if}
+                    </div>
+                    <p class="choice-desc">
+                      สั่งพิมพ์ใบเสร็จออกเครื่องพิมพ์ทันทีเมื่อรับชำระเงินสำเร็จ
+                      โดยไม่เปิดหน้าต่างพรีวิว
+                      เหมาะสำหรับร้านค้าที่ต้องการความรวดเร็วในการขายหน้าร้าน
+                    </p>
                   </div>
-                </div>
+                </label>
 
-                <div class="fluent-row fluent-row-action">
-                  <div class="fluent-row-info">
-                    <span class="fluent-row-title"
-                      >แสดงตัวอย่างใบเสร็จก่อนพิมพ์</span
-                    >
-                    <span class="fluent-row-desc"
-                      >เปิดหน้าต่างพรีวิวใบเสร็จเพื่อตรวจสอบรายการก่อนส่งพิมพ์</span
-                    >
+                <!-- Option 2: Preview & Confirm -->
+                <label
+                  class="choice-card"
+                  class:selected={printBehavior === "preview"}
+                >
+                  <div class="choice-radio">
+                    <input
+                      type="radio"
+                      name="print-behavior"
+                      value="preview"
+                      checked={printBehavior === "preview"}
+                      onchange={() => (printBehavior = "preview")}
+                    />
+                    <div class="radio-indicator"></div>
                   </div>
-                  <div class="fluent-row-control">
-                    <label class="toggle-switch">
-                      <input
-                        type="checkbox"
-                        bind:checked={receiptPreviewEnabled}
-                      />
-                      <span class="toggle-slider"></span>
-                    </label>
+                  <div class="choice-content">
+                    <div class="choice-header">
+                      <span class="choice-title"
+                        >แสดงตัวอย่างใบเสร็จก่อนพิมพ์ (Preview & Confirm)</span
+                      >
+                    </div>
+                    <p class="choice-desc">
+                      เปิดหน้าต่างพรีวิวใบเสร็จเพื่อตรวจสอบรายการ ยอดเงิน
+                      และเงินทอนก่อน แล้วจึงกด Enter หรือกดยืนยันเพื่อสั่งพิมพ์
+                    </p>
                   </div>
-                </div>
+                </label>
+
+                <!-- Option 3: Manual / No Auto Print -->
+                <label
+                  class="choice-card"
+                  class:selected={printBehavior === "none"}
+                >
+                  <div class="choice-radio">
+                    <input
+                      type="radio"
+                      name="print-behavior"
+                      value="none"
+                      checked={printBehavior === "none"}
+                      onchange={() => (printBehavior = "none")}
+                    />
+                    <div class="radio-indicator"></div>
+                  </div>
+                  <div class="choice-content">
+                    <div class="choice-header">
+                      <span class="choice-title"
+                        >ไม่พิมพ์ใบเสร็จอัตโนมัติ (Manual / No Print)</span
+                      >
+                      <span class="choice-badge badge-muted">ประหยัดกระดาษ</span
+                      >
+                    </div>
+                    <p class="choice-desc">
+                      บันทึกการขายเสร็จสิ้นทันทีโดยไม่เปิดหน้าต่างและไม่สั่งพิมพ์กระดาษ
+                      เหมาะสำหรับร้านที่ไม่ต้องการพิมพ์ทุกออเดอร์
+                      (สามารถพิมพ์ย้อนหลังได้จากประวัติบิล)
+                    </p>
+                  </div>
+                </label>
               </div>
             </div>
 
@@ -1478,7 +1569,9 @@
                         placeholder="10"
                       />
                       {#if formErrors.low_stock_threshold}
-                        <span class="error-text">{formErrors.low_stock_threshold}</span>
+                        <span class="error-text"
+                          >{formErrors.low_stock_threshold}</span
+                        >
                       {/if}
                     </div>
                   </div>
@@ -2063,6 +2156,140 @@
     gap: var(--space-md);
     padding-top: var(--space-md);
     border-top: 1px solid var(--color-muted);
+  }
+
+  /* PRINT BEHAVIOR SINGLE CHOICE CARDS */
+  .print-behavior-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .choice-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 18px;
+    border: 1.5px solid var(--color-muted);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface);
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+  }
+
+  .choice-card:hover:not(.disabled) {
+    border-color: rgba(94, 129, 172, 0.6);
+    background-color: rgba(94, 129, 172, 0.03);
+  }
+
+  .choice-card.selected {
+    border-color: var(--color-primary);
+    background-color: rgba(94, 129, 172, 0.06);
+  }
+
+  .choice-card.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-color: rgba(216, 222, 233, 0.2);
+  }
+
+  .choice-radio {
+    margin-top: 2px;
+    position: relative;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .choice-radio input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .radio-indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--color-muted);
+    background-color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .choice-card:hover:not(.disabled) .radio-indicator {
+    border-color: var(--color-primary);
+  }
+
+  .choice-card.selected .radio-indicator {
+    border-color: var(--color-primary);
+  }
+
+  .choice-card.selected .radio-indicator::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-primary);
+  }
+
+  .choice-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .choice-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .choice-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .choice-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    line-height: 1.2;
+  }
+
+  .badge-primary {
+    background-color: rgba(94, 129, 172, 0.16);
+    color: var(--color-primary);
+  }
+
+  .badge-muted {
+    background-color: rgba(100, 116, 139, 0.12);
+    color: #475569;
+  }
+
+  .badge-warning {
+    background-color: rgba(235, 203, 139, 0.3);
+    color: #9c6e00;
+  }
+
+  .choice-desc {
+    font-size: 12.5px;
+    color: var(--color-text-primary);
+    opacity: 0.7;
+    line-height: 1.45;
+    margin: 0;
   }
 
   /* TOGGLE SWITCH COMPONENT */

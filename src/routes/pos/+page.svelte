@@ -58,11 +58,25 @@
   let showClearConfirm = $state(false);
   let heldCount = $state(0);
   let previewOrder = $state<Order | null>(null);
-  let receiptPreviewEnabled = $state(true);
+  let printBehavior = $state<"direct" | "preview" | "none">("direct");
+  let printerConnection = $state("none");
+  let receiptPreviewEnabled = $state(false);
   let allowOutOfStockSale = $state(false);
 
   let errorModal = $state({ open: false, title: "", message: "", details: "" });
   let searchInput = $state<HTMLInputElement | null>(null);
+
+  // Toast notification state
+  let toastMessage = $state<{ title: string; subtitle?: string } | null>(null);
+  let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function showToast(title: string, subtitle?: string) {
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastMessage = { title, subtitle };
+    toastTimeout = setTimeout(() => {
+      toastMessage = null;
+    }, 2500);
+  }
 
   function showError(err: unknown, title: string) {
     const parsed = parseAppError(err, title);
@@ -82,10 +96,7 @@
           page: currentPage,
           pageSize: pageSize,
           search: search.trim() || null,
-          categoryId:
-            activeCategory === "all"
-              ? null
-              : String(activeCategory),
+          categoryId: activeCategory === "all" ? null : String(activeCategory),
         },
       })) as ProductsPageData;
       products = data.products ?? [];
@@ -124,23 +135,53 @@
     });
 
     (async () => {
-      await Promise.all([loadProducts(), loadHeldCount(), fetchSystemCurrency()]);
+      await Promise.all([
+        loadProducts(),
+        loadHeldCount(),
+        fetchSystemCurrency(),
+      ]);
       isMounted = true;
       try {
         const settings = (await invoke("get_settings")) as AppSettings;
-        receiptPreviewEnabled = settings.receipt_preview_enabled !== "false";
+        printerConnection = settings.printer_connection || "none";
+        if (settings.print_behavior) {
+          printBehavior = settings.print_behavior as "direct" | "preview" | "none";
+        } else if (
+          settings.auto_print_enabled === "true" &&
+          settings.receipt_preview_enabled === "false"
+        ) {
+          printBehavior = "direct";
+        } else if (
+          settings.receipt_preview_enabled === "true" &&
+          settings.auto_print_enabled === "false"
+        ) {
+          printBehavior = "preview";
+        } else if (
+          settings.receipt_preview_enabled === "false" &&
+          settings.auto_print_enabled === "false"
+        ) {
+          printBehavior = "none";
+        } else {
+          printBehavior = "direct";
+        }
+        receiptPreviewEnabled = printBehavior === "preview";
         allowOutOfStockSale = settings.allow_out_of_stock_sale === "true";
         const parsedThreshold = Number(settings.low_stock_threshold);
-        lowStockThreshold = !isNaN(parsedThreshold) && parsedThreshold >= 1 ? parsedThreshold : 10;
+        lowStockThreshold =
+          !isNaN(parsedThreshold) && parsedThreshold >= 1
+            ? parsedThreshold
+            : 10;
         lowStockAlert = settings.low_stock_alert !== "false";
       } catch {
-        receiptPreviewEnabled = true;
+        printBehavior = "direct";
+        receiptPreviewEnabled = false;
         allowOutOfStockSale = false;
       }
     })();
 
     return () => {
       unsub();
+      if (toastTimeout) clearTimeout(toastTimeout);
     };
   });
 
@@ -270,8 +311,25 @@
   async function handleSaleCompleted(order: Order) {
     cart = [];
     discountAmount = 0;
+    const orderNo = order?.order_no ? `บิล ${order.order_no}` : "";
+    const totalText =
+      order?.total_amount != null
+        ? ` · ยอดชำระ ${formatMoney(order.total_amount)} ${currencySymbol}`
+        : "";
+    const changeText =
+      order?.change_amount && order.change_amount > 0
+        ? ` · เงินทอน ${formatMoney(order.change_amount)} ${currencySymbol}`
+        : "";
+    const printNote =
+      printBehavior === "direct" && printerConnection !== "none"
+        ? " · กำลังพิมพ์ใบเสร็จ..."
+        : "";
+    showToast(
+      "ชำระเงินเรียบร้อยแล้ว",
+      orderNo ? `${orderNo}${totalText}${changeText}${printNote}` : undefined,
+    );
     await loadProducts();
-    if (receiptPreviewEnabled) {
+    if (printBehavior === "preview") {
       previewOrder = order;
     }
   }
@@ -528,7 +586,8 @@
             </div>
             <div class="cart-item-right">
               <span class="cart-item-total"
-                >{formatMoney(item.unit_price * item.quantity)} {currencySymbol}</span
+                >{formatMoney(item.unit_price * item.quantity)}
+                {currencySymbol}</span
               >
               <button
                 type="button"
@@ -562,7 +621,8 @@
       >
         <span>ส่วนลด</span>
         <span class="discount-value">
-          -{formatMoney(discountAmount)} {currencySymbol} <small>แก้ไข</small>
+          -{formatMoney(discountAmount)}
+          {currencySymbol} <small>แก้ไข</small>
         </span>
       </button>
       <div class="summary-row">
@@ -602,7 +662,8 @@
         onclick={() => (showCheckout = true)}
       >
         <span>ชำระเงิน (Space / Enter)</span>
-        <span class="pay-amount">{formatMoney(cartTotal)} {currencySymbol}</span>
+        <span class="pay-amount">{formatMoney(cartTotal)} {currencySymbol}</span
+        >
       </button>
     </div>
   </aside>
@@ -644,7 +705,20 @@
   onClose={() => (showReturn = false)}
   onCompleted={(order) => {
     loadProducts();
-    if (receiptPreviewEnabled) {
+    const orderNo = order?.order_no ? `บิล ${order.order_no}` : "";
+    const totalText =
+      order?.total_amount != null
+        ? ` · ยอดคืน ${formatMoney(order.total_amount)} ${currencySymbol}`
+        : "";
+    const printNote =
+      printBehavior === "direct" && printerConnection !== "none"
+        ? " · กำลังพิมพ์ใบเสร็จ..."
+        : "";
+    showToast(
+      "บันทึกการคืนสินค้าเรียบร้อยแล้ว",
+      orderNo ? `${orderNo}${totalText}${printNote}` : undefined,
+    );
+    if (printBehavior === "preview") {
       previewOrder = order;
     }
   }}
@@ -675,6 +749,53 @@
   onClose={() =>
     (errorModal = { open: false, title: "", message: "", details: "" })}
 />
+
+<!-- Toast Notification -->
+{#if toastMessage}
+  <aside class="pos-toast" role="status" aria-live="polite">
+    <div class="toast-icon">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+        <polyline points="22 4 12 14.01 9 11.01" />
+      </svg>
+    </div>
+    <div class="toast-content">
+      <div class="toast-title">{toastMessage.title}</div>
+      {#if toastMessage.subtitle}
+        <div class="toast-subtitle">{toastMessage.subtitle}</div>
+      {/if}
+    </div>
+    <button
+      type="button"
+      class="toast-close"
+      aria-label="ปิดการแจ้งเตือน"
+      onclick={() => (toastMessage = null)}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+  </aside>
+{/if}
 
 <style>
   .topbar {
@@ -1092,5 +1213,89 @@
 
   .pay-amount {
     font-size: 18px;
+  }
+
+  /* Toast Notification */
+  .pos-toast {
+    position: fixed;
+    bottom: var(--space-xl);
+    right: var(--space-xl);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-muted);
+    border-left: 4px solid var(--color-accent-success);
+    color: var(--color-text-primary);
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(46, 52, 64, 0.12);
+    animation: toastSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 400px;
+  }
+
+  .toast-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: rgba(163, 190, 140, 0.2);
+    color: #43694f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .toast-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .toast-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .toast-subtitle {
+    font-size: 13px;
+    color: #4c566a;
+    word-break: break-word;
+  }
+
+  .toast-close {
+    color: #7b889b;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    transition:
+      background-color 0.15s,
+      color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .toast-close:hover {
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+  }
+
+  @keyframes toastSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>

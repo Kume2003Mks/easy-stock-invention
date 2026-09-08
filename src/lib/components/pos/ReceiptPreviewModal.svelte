@@ -22,11 +22,9 @@
     store_phone: "",
   });
   let receiptFont = $state("sarabun");
-  let autoPrintEnabled = $state(false);
   let printing = $state(false);
   let printSuccess = $state(false);
   let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastAutoPrintedOrderId = $state<string | null>(null);
 
   let errorModal = $state({ open: false, title: "", message: "", details: "" });
 
@@ -35,8 +33,6 @@
       const res = (await invoke("get_settings")) as any;
       store = res as StoreSettings;
       receiptFont = res.receipt_font || "sarabun";
-      autoPrintEnabled =
-        res.auto_print_enabled !== "false" && res.printer_connection !== "none";
     } catch {
       // ใช้ค่าเริ่มต้นหากโหลด settings ไม่ได้
     }

@@ -61,10 +61,19 @@ fn load_receipt_settings(conn: &Connection) -> ReceiptSettings {
     if let Some(v) = get("store_phone") {
         s.store_phone = v;
     }
-    s.auto_print_enabled = get("auto_print_enabled").map(|v| v == "true").unwrap_or(true);
-    s.receipt_preview_enabled = get("receipt_preview_enabled")
-        .map(|v| v == "true")
-        .unwrap_or(true);
+    let print_behavior = get("print_behavior");
+    s.auto_print_enabled = match print_behavior.as_deref() {
+        Some("direct") => true,
+        Some("preview") | Some("none") => false,
+        _ => get("auto_print_enabled").map(|v| v == "true").unwrap_or(true),
+    };
+    s.receipt_preview_enabled = match print_behavior.as_deref() {
+        Some("preview") => true,
+        Some("direct") | Some("none") => false,
+        _ => get("receipt_preview_enabled")
+            .map(|v| v == "true")
+            .unwrap_or(false),
+    };
     if let Some(v) = get("paper_size") {
         s.paper_size = PaperSize::from_setting(&v);
     }

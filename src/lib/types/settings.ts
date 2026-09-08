@@ -13,6 +13,7 @@ export interface AppSettings {
   allow_out_of_stock_sale?: string;
   auto_print_enabled: string;
   receipt_preview_enabled: string;
+  print_behavior?: "direct" | "preview" | "none" | string;
   paper_size: string;
   printer_connection: string;
   printer_target: string;
