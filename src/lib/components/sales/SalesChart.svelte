@@ -27,8 +27,8 @@
       const parts = period.split('-');
       if (parts.length === 2) {
         const m = parseInt(parts[1], 10) - 1;
-        const y = parseInt(parts[0], 10) + 543;
-        return `${thaiMonthsShort[m] ?? period} ${String(y).slice(-2)}`;
+        const y = parts[0];
+        return `${thaiMonthsShort[m] ?? period} ${y.slice(-2)}`;
       }
       return period;
     }
@@ -38,6 +38,31 @@
       const d = parseInt(parts[2], 10);
       const m = parseInt(parts[1], 10) - 1;
       return `${d} ${thaiMonthsShort[m] ?? ''}`;
+    }
+    return period;
+  }
+
+  function formatTooltipHeader(period: string, type: string): string {
+    if (!period) return '';
+    if (type === 'hourly') {
+      return `${period} น.`;
+    }
+    if (type === 'monthly') {
+      const parts = period.split('-');
+      if (parts.length === 2) {
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parts[0];
+        return `${thaiMonthsShort[m] ?? period} ${y}`;
+      }
+      return period;
+    }
+    // Daily "YYYY-MM-DD"
+    const parts = period.split('-');
+    if (parts.length === 3) {
+      const d = parseInt(parts[2], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const y = parts[0];
+      return `${d} ${thaiMonthsShort[m] ?? ''} ${y}`;
     }
     return period;
   }
@@ -191,7 +216,7 @@
               x={x + barWidth / 2}
               y={padTop + chartH + 18}
               text-anchor="middle"
-              font-size="11"
+              font-size={items.length > 20 ? '10' : '11'}
               font-weight={isHovered ? '600' : '400'}
               fill={isHovered ? 'var(--color-primary)' : 'var(--color-text-primary)'}
               font-family="var(--font-body)"
@@ -206,11 +231,17 @@
       {#if hoveredIndex !== null && items[hoveredIndex]}
         {@const it = items[hoveredIndex]}
         {@const leftPercent = ((padLeft + hoveredIndex * barStep + barStep / 2) / svgWidth) * 100}
+        {@const tooltipTransform =
+          hoveredIndex <= 1
+            ? 'translateX(-10%)'
+            : hoveredIndex >= items.length - 2
+              ? 'translateX(-90%)'
+              : 'translateX(-50%)'}
         <div
           class="tooltip"
-          style="left: {leftPercent}%;"
+          style="left: {leftPercent}%; transform: {tooltipTransform};"
         >
-          <div class="tooltip-header">{formatLabel(it.period, periodType)} ({it.period})</div>
+          <div class="tooltip-header">{formatTooltipHeader(it.period, periodType)}</div>
           <div class="tooltip-row">
             <span class="tooltip-label">ยอดขาย:</span>
             <span class="tooltip-val highlight">{currencySymbol}{formatCurrency(it.totalSales)}</span>

@@ -13,7 +13,7 @@
     SalesSummaryBreakdownItem,
   } from "$lib/types";
 
-  type PresetPeriod = "today" | "7days" | "thisMonth" | "thisYear" | "custom";
+  type PresetPeriod = "today" | "yesterday" | "7days" | "thisMonth" | "thisYear" | "custom";
 
   let activePreset = $state<PresetPeriod>("today");
   let startDate = $state("");
@@ -58,6 +58,11 @@
     if (preset === "today") {
       startDate = todayStr;
       endDate = todayStr;
+    } else if (preset === "yesterday") {
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const yesterdayStr = formatLocalDate(yesterday);
+      startDate = yesterdayStr;
+      endDate = yesterdayStr;
     } else if (preset === "7days") {
       const past = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
       startDate = formatLocalDate(past);
@@ -132,7 +137,7 @@
       const parts = period.split("-");
       if (parts.length === 2) {
         const m = parseInt(parts[1], 10) - 1;
-        const y = parseInt(parts[0], 10) + 543;
+        const y = parts[0];
         return `${thaiMonthsFull[m] ?? period} ${y}`;
       }
       return period;
@@ -142,7 +147,7 @@
     if (parts.length === 3) {
       const d = parseInt(parts[2], 10);
       const m = parseInt(parts[1], 10) - 1;
-      const y = parseInt(parts[0], 10) + 543;
+      const y = parts[0];
       return `${d} ${thaiMonthsFull[m] ?? ""} ${y}`;
     }
     return period;
@@ -215,10 +220,12 @@
   }
 
   // Chart data: if single day and hourlyBreakdown exists, show hourly in chart; otherwise breakdown
+  const isSingleDay = $derived(Boolean(startDate && startDate === endDate));
+
   const chartItems = $derived.by((): SalesSummaryBreakdownItem[] => {
     if (!salesData) return [];
     if (
-      activePreset === "today" &&
+      isSingleDay &&
       salesData.hourlyBreakdown &&
       salesData.hourlyBreakdown.length > 0
     ) {
@@ -228,7 +235,7 @@
   });
 
   const chartPeriodType = $derived(
-    activePreset === "today" &&
+    isSingleDay &&
       salesData?.hourlyBreakdown &&
       salesData.hourlyBreakdown.length > 0
       ? "hourly"
@@ -333,6 +340,12 @@
           onclick={() => applyPreset("today")}
         >
           วันนี้
+        </button>
+        <button
+          class="preset-btn {activePreset === 'yesterday' ? 'active' : ''}"
+          onclick={() => applyPreset("yesterday")}
+        >
+          เมื่อวาน
         </button>
         <button
           class="preset-btn {activePreset === '7days' ? 'active' : ''}"
@@ -504,7 +517,13 @@
             <h2>แนวโน้มยอดขาย</h2>
             <span class="badge badge-primary">
               {#if chartPeriodType === "hourly"}
-                แจกแจงรายชั่วโมง (วันนี้)
+                {#if activePreset === "today"}
+                  แจกแจงรายชั่วโมง (วันนี้)
+                {:else if activePreset === "yesterday"}
+                  แจกแจงรายชั่วโมง (เมื่อวาน)
+                {:else}
+                  แจกแจงรายชั่วโมง
+                {/if}
               {:else if chartPeriodType === "monthly"}
                 แจกแจงรายเดือน
               {:else}
