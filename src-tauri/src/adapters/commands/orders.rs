@@ -266,6 +266,37 @@ pub fn get_order_by_no(
     order_repo::get_order_by_no(&conn, &order_no)
 }
 
+/// สรุปยอดขาย รายวัน - เดือน
+#[tauri::command]
+pub fn get_sales_summary(
+    state: State<'_, Mutex<Connection>>,
+    filter: Option<order_repo::SalesSummaryFilter>,
+) -> Result<order_repo::SalesSummaryResult, AppError> {
+    let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+    let f = filter.unwrap_or_default();
+    order_repo::get_sales_summary(&conn, &f)
+}
+
+/// บันทึกไฟล์ CSV โดยเปิดหน้าต่างให้ผู้ใช้เลือกปลายทางบันทึก (Native Save File Dialog)
+#[tauri::command]
+pub async fn export_csv_file(
+    default_filename: String,
+    content: String,
+) -> Result<Option<String>, AppError> {
+    let dialog = rfd::AsyncFileDialog::new()
+        .set_file_name(&default_filename)
+        .add_filter("CSV Files (*.csv)", &["csv"]);
+
+    if let Some(file_handle) = dialog.save_file().await {
+        let path = file_handle.path().to_path_buf();
+        std::fs::write(&path, content.as_bytes())
+            .map_err(|e| AppError::Internal(format!("บันทึกไฟล์ไม่สำเร็จ: {}", e)))?;
+        Ok(Some(path.to_string_lossy().to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
 // ==========================================================
 // Return Order (RB — รับคืนสินค้า/คืนเงิน)
 // ==========================================================

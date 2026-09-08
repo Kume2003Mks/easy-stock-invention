@@ -80,6 +80,44 @@ pub struct PaginatedOrders {
 }
 
 // ==========================================================
+// Sales Summary Contracts
+// ==========================================================
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SalesSummaryFilter {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub group_by: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SalesSummaryKpi {
+    pub total_sales: f64,
+    pub total_orders: i64,
+    pub average_order_value: f64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SalesSummaryBreakdownItem {
+    pub period: String,
+    pub total_sales: f64,
+    pub order_count: i64,
+    pub average_order_value: f64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SalesSummaryResult {
+    pub kpi: SalesSummaryKpi,
+    pub breakdown: Vec<SalesSummaryBreakdownItem>,
+    pub hourly_breakdown: Option<Vec<SalesSummaryBreakdownItem>>,
+    pub period_type: String,
+}
+
+// ==========================================================
 // Helpers
 // ==========================================================
 
@@ -550,6 +588,204 @@ pub fn get_order_by_no(conn: &Connection, order_no: &str) -> Result<Order, AppEr
 }
 
 // ==========================================================
+// Sales Summary (สรุปยอดขาย รายวัน - เดือน)
+// ==========================================================
+
+pub fn get_sales_summary(
+    conn: &Connection,
+    filter: &SalesSummaryFilter,
+) -> Result<SalesSummaryResult, AppError> {
+    if let (Some(s), Some(e)) = (&filter.start_date, &filter.end_date) {
+        let s_trimmed = s.trim();
+        let e_trimmed = e.trim();
+        if !s_trimmed.is_empty() && !e_trimmed.is_empty() && e_trimmed < s_trimmed {
+            return Err(AppError::Validation(
+                "วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น".to_string(),
+            ));
+        }
+    }
+
+    let group_by_mode = match filter.group_by.as_deref() {
+        Some("monthly") => "monthly",
+        Some("daily") => "daily",
+        Some("hourly") => "hourly",
+        _ => {
+            if let (Some(s), Some(e)) = (&filter.start_date, &filter.end_date) {
+                if let (Ok(d1), Ok(d2)) = (
+                    chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d"),
+                    chrono::NaiveDate::parse_from_str(e.trim(), "%Y-%m-%d"),
+                ) {
+                    let diff_days = (d2 - d1).num_days();
+                    if diff_days > 90 {
+                        "monthly"
+                    } else {
+                        "daily"
+                    }
+                } else {
+                    "daily"
+                }
+            } else {
+                "daily"
+            }
+        }
+    };
+
+    let strftime_fmt = match group_by_mode {
+        "monthly" => "%Y-%m",
+        "hourly" => "%H:00",
+        _ => "%Y-%m-%d",
+    };
+
+    let mut where_clauses: Vec<String> = vec!["status = 'COMPLETED'".to_string()];
+    let mut sql_params: Vec<Box<dyn ToSql>> = Vec::new();
+
+    if let Some(ref start) = filter.start_date {
+        let trimmed = start.trim();
+        if !trimmed.is_empty() {
+            where_clauses.push("date(order_date, 'localtime') >= ?".to_string());
+            sql_params.push(Box::new(trimmed.to_string()));
+        }
+    }
+
+    if let Some(ref end) = filter.end_date {
+        let trimmed = end.trim();
+        if !trimmed.is_empty() {
+            where_clauses.push("date(order_date, 'localtime') <= ?".to_string());
+            sql_params.push(Box::new(trimmed.to_string()));
+        }
+    }
+
+    let where_sql = format!("WHERE {}", where_clauses.join(" AND "));
+    let param_refs: Vec<&dyn ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+
+    // 1. คำนวณ KPI ภาพรวม
+    let kpi_sql = format!(
+        "SELECT 
+            COALESCE(SUM(CASE WHEN order_type = 'SALE' THEN total_amount WHEN order_type = 'RETURN' THEN -total_amount ELSE 0.0 END), 0.0) as net_sales,
+            COALESCE(SUM(CASE WHEN order_type = 'SALE' THEN 1 ELSE 0 END), 0) as total_orders
+         FROM Orders {}",
+        where_sql
+    );
+    let (net_sales, total_orders): (f64, i64) = conn
+        .query_row(
+            &kpi_sql,
+            rusqlite::params_from_iter(param_refs.iter().copied()),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(AppError::from)?;
+
+    let total_sales = net_sales.max(0.0);
+    let average_order_value = if total_orders > 0 {
+        total_sales / total_orders as f64
+    } else {
+        0.0
+    };
+
+    // 2. แจกแจงตามช่วงเวลา (Breakdown)
+    let breakdown_sql = format!(
+        "SELECT 
+            strftime('{}', order_date, 'localtime') as period,
+            COALESCE(SUM(CASE WHEN order_type = 'SALE' THEN total_amount WHEN order_type = 'RETURN' THEN -total_amount ELSE 0.0 END), 0.0) as period_sales,
+            COALESCE(SUM(CASE WHEN order_type = 'SALE' THEN 1 ELSE 0 END), 0) as order_count
+         FROM Orders {}
+         GROUP BY period
+         ORDER BY period ASC",
+        strftime_fmt, where_sql
+    );
+    let mut stmt = conn.prepare(&breakdown_sql).map_err(AppError::from)?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(param_refs.iter().copied()), |row| {
+            let period: Option<String> = row.get(0)?;
+            let period_sales: f64 = row.get(1)?;
+            let order_count: i64 = row.get(2)?;
+            Ok((period.unwrap_or_default(), period_sales, order_count))
+        })
+        .map_err(AppError::from)?;
+
+    let mut breakdown = Vec::new();
+    for r in rows {
+        let (period, period_sales, order_count) = r.map_err(AppError::from)?;
+        if period.is_empty() {
+            continue;
+        }
+        let sales = period_sales.max(0.0);
+        let avg = if order_count > 0 {
+            sales / order_count as f64
+        } else {
+            0.0
+        };
+        breakdown.push(SalesSummaryBreakdownItem {
+            period,
+            total_sales: sales,
+            order_count,
+            average_order_value: avg,
+        });
+    }
+
+    // 3. แจกแจงรายชั่วโมงเฉพาะกรณีดูวันเดียว (Single Day)
+    let is_single_day = match (&filter.start_date, &filter.end_date) {
+        (Some(s), Some(e)) if !s.trim().is_empty() && s.trim() == e.trim() => true,
+        _ => false,
+    };
+
+    let hourly_breakdown = if is_single_day {
+        let hourly_sql = format!(
+            "SELECT 
+                strftime('%H:00', order_date, 'localtime') as hr,
+                COALESCE(SUM(CASE WHEN order_type = 'SALE' THEN total_amount WHEN order_type = 'RETURN' THEN -total_amount ELSE 0.0 END), 0.0) as hr_sales,
+                COALESCE(SUM(CASE WHEN order_type = 'SALE' THEN 1 ELSE 0 END), 0) as hr_count
+             FROM Orders {}
+             GROUP BY hr
+             ORDER BY hr ASC",
+            where_sql
+        );
+        let mut h_stmt = conn.prepare(&hourly_sql).map_err(AppError::from)?;
+        let h_rows = h_stmt
+            .query_map(rusqlite::params_from_iter(param_refs.iter().copied()), |row| {
+                let hr: Option<String> = row.get(0)?;
+                let hr_sales: f64 = row.get(1)?;
+                let hr_count: i64 = row.get(2)?;
+                Ok((hr.unwrap_or_default(), hr_sales, hr_count))
+            })
+            .map_err(AppError::from)?;
+
+        let mut h_list = Vec::new();
+        for r in h_rows {
+            let (hr, hr_sales, hr_count) = r.map_err(AppError::from)?;
+            if hr.is_empty() {
+                continue;
+            }
+            let sales = hr_sales.max(0.0);
+            let avg = if hr_count > 0 {
+                sales / hr_count as f64
+            } else {
+                0.0
+            };
+            h_list.push(SalesSummaryBreakdownItem {
+                period: hr,
+                total_sales: sales,
+                order_count: hr_count,
+                average_order_value: avg,
+            });
+        }
+        Some(h_list)
+    } else {
+        None
+    };
+
+    Ok(SalesSummaryResult {
+        kpi: SalesSummaryKpi {
+            total_sales,
+            total_orders,
+            average_order_value,
+        },
+        breakdown,
+        hourly_breakdown,
+        period_type: group_by_mode.to_string(),
+    })
+}
+
+// ==========================================================
 // Return Order (RB — รับคืนสินค้า/คืนเงิน)
 // ==========================================================
 
@@ -976,5 +1212,55 @@ mod tests {
         .unwrap();
         assert_eq!(page.total_items, 1);
         assert_eq!(page.orders[0].order_id, order.order_id);
+    }
+
+    #[test]
+    fn test_sales_summary() {
+        let conn = setup();
+        // บิลที่ 1: น้ำดื่ม 2 ขวด @ 7 = 14
+        let _o1 = create_order(&conn, &checkout_input("p1", "น้ำดื่ม 500ml", 2, 7.0)).unwrap();
+        // บิลที่ 2: ขนม 1 ชิ้น @ 20 = 20
+        let _o2 = create_order(&conn, &checkout_input("p2", "ขนม", 1, 20.0)).unwrap();
+
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        let summary = get_sales_summary(
+            &conn,
+            &SalesSummaryFilter {
+                start_date: Some(today.clone()),
+                end_date: Some(today.clone()),
+                group_by: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(summary.kpi.total_orders, 2);
+        assert!((summary.kpi.total_sales - 34.0).abs() < 1e-6);
+        assert!((summary.kpi.average_order_value - 17.0).abs() < 1e-6);
+        assert_eq!(summary.period_type, "daily");
+        assert_eq!(summary.breakdown.len(), 1);
+        assert_eq!(summary.breakdown[0].period, today);
+        assert!((summary.breakdown[0].total_sales - 34.0).abs() < 1e-6);
+        assert!(summary.hourly_breakdown.is_some());
+    }
+
+    #[test]
+    fn test_sales_summary_invalid_date_range() {
+        let conn = setup();
+        let err = get_sales_summary(
+            &conn,
+            &SalesSummaryFilter {
+                start_date: Some("2026-09-18".to_string()),
+                end_date: Some("2026-09-06".to_string()),
+                group_by: None,
+            },
+        )
+        .unwrap_err();
+
+        match err {
+            AppError::Validation(msg) => {
+                assert_eq!(msg, "วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น");
+            }
+            _ => panic!("Expected AppError::Validation, got {:?}", err),
+        }
     }
 }

@@ -45,6 +45,8 @@ pub fn run() {
             adapters::commands::get_orders,
             adapters::commands::get_order_detail,
             adapters::commands::get_order_by_no,
+            adapters::commands::get_sales_summary,
+            adapters::commands::export_csv_file,
             adapters::commands::create_return_order,
             adapters::commands::print_receipt,
             adapters::commands::print_test_receipt,

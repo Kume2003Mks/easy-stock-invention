@@ -8,7 +8,7 @@
     { href: "/products", name: "สินค้าคงคลัง", icon: "box" },
     { href: "/categories", name: "หมวดหมู่", icon: "shapes" },
     { href: "/suppliers", name: "ผู้จัดจำหน่าย", icon: "truck" },
-    // { href: '/transactions', name: 'รายงาน', icon: 'chart' },
+    { href: "/sales-summary", name: "สรุปยอดขาย", icon: "chart" },
     { href: "/settings", name: "ตั้งค่า", icon: "settings" },
   ];
 
