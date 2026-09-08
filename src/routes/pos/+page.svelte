@@ -27,6 +27,8 @@
   let categories = $state<CategoryForPos[]>([]);
   let currency = $state("THB");
   let currencySymbol = $derived(getCurrencySymbol(currency));
+  let lowStockThreshold = $state(10);
+  let lowStockAlert = $state(true);
   let loading = $state(true);
   let loadError = $state("");
   let totalItems = $state(0);
@@ -128,7 +130,9 @@
         const settings = (await invoke("get_settings")) as AppSettings;
         receiptPreviewEnabled = settings.receipt_preview_enabled !== "false";
         allowOutOfStockSale = settings.allow_out_of_stock_sale === "true";
-        if (settings.currency) currency = settings.currency;
+        const parsedThreshold = Number(settings.low_stock_threshold);
+        lowStockThreshold = !isNaN(parsedThreshold) && parsedThreshold >= 1 ? parsedThreshold : 10;
+        lowStockAlert = settings.low_stock_alert !== "false";
       } catch {
         receiptPreviewEnabled = true;
         allowOutOfStockSale = false;
@@ -454,15 +458,19 @@
                 ? allowOutOfStockSale
                   ? 'out-allowed'
                   : 'low'
-                : product.current_stock <= 5
+                : lowStockAlert && product.current_stock <= lowStockThreshold
                   ? 'low'
                   : ''}"
             >
-              {product.current_stock <= 0
-                ? allowOutOfStockSale
+              {#if product.current_stock <= 0}
+                {allowOutOfStockSale
                   ? `หมด (คงเหลือ ${product.current_stock})`
-                  : "สินค้าหมด"
-                : `คงเหลือ ${product.current_stock}`}
+                  : "สินค้าหมด"}
+              {:else if lowStockAlert && product.current_stock <= lowStockThreshold}
+                ใกล้หมด (คงเหลือ {product.current_stock})
+              {:else}
+                คงเหลือ {product.current_stock}
+              {/if}
             </span>
           </button>
         {/each}

@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS Products (
     selling_price REAL NOT NULL DEFAULT 0.0,        
     wholesale_price REAL NOT NULL DEFAULT 0.0,     
     current_stock INTEGER NOT NULL DEFAULT 0,
-    reorder_level INTEGER NOT NULL DEFAULT 10,
     FOREIGN KEY (category_id) REFERENCES Categories(category_id) ON UPDATE CASCADE ON DELETE SET NULL,
     FOREIGN KEY (supplier_id) REFERENCES Suppliers(supplier_id) ON UPDATE CASCADE ON DELETE SET NULL
 );

@@ -25,7 +25,6 @@ pub struct Product {
     pub selling_price: f64,
     pub wholesale_price: f64,
     pub current_stock: i32,
-    pub reorder_level: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

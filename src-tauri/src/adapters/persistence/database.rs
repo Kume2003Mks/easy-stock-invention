@@ -97,6 +97,16 @@ fn migrate_legacy_order_tables(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Migration: ลบคอลัมน์ reorder_level ออกจากตาราง Products ถ้ามีอยู่เดิม
+fn migrate_products_schema(conn: &Connection) -> Result<(), AppError> {
+    let columns = get_table_columns(conn, "Products")?;
+    if columns.iter().any(|c| c == "reorder_level") {
+        conn.execute("ALTER TABLE Products DROP COLUMN reorder_level", [])
+            .map_err(AppError::from)?;
+    }
+    Ok(())
+}
+
 pub fn init_db(app_data_dir: PathBuf) -> Result<Connection, AppError> {
     // Ensure the app data directory exists
     if !app_data_dir.exists() {
@@ -120,6 +130,9 @@ pub fn init_db(app_data_dir: PathBuf) -> Result<Connection, AppError> {
 
     // ตรวจและลบ legacy ตาราง POS เก่า (ถ้ามี) ก่อนรัน schema migration
     migrate_legacy_order_tables(&conn)?;
+
+    // อัปเกรด schema ของ Products (ถ้ามี reorder_level ตกค้าง)
+    migrate_products_schema(&conn)?;
 
     // Run schema migration
     let schema = include_str!("schema.sql");
@@ -184,5 +197,30 @@ mod tests {
                 .unwrap();
             assert_eq!(count, 1, "ตาราง {} ต้องถูกสร้าง", table);
         }
+    }
+
+    #[test]
+    fn test_migrate_products_schema() {
+        let conn = Connection::open_in_memory().unwrap();
+        // จำลองตาราง Products เดิมที่มีคอลัมน์ reorder_level
+        conn.execute_batch(
+            "CREATE TABLE Products (
+                product_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                current_stock INTEGER NOT NULL DEFAULT 0,
+                reorder_level INTEGER NOT NULL DEFAULT 10
+            );",
+        )
+        .unwrap();
+
+        let cols_before = get_table_columns(&conn, "Products").unwrap();
+        assert!(cols_before.contains(&"reorder_level".to_string()));
+
+        // รัน migration เพื่อลบ reorder_level
+        migrate_products_schema(&conn).unwrap();
+
+        let cols_after = get_table_columns(&conn, "Products").unwrap();
+        assert!(!cols_after.contains(&"reorder_level".to_string()));
+        assert!(cols_after.contains(&"name".to_string()));
     }
 }

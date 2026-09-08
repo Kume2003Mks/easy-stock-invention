@@ -138,6 +138,15 @@ pub fn save_settings(
 ) -> Result<(), AppError> {
     let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
+    // ตรวจสอบระดับสต็อกขั้นต่ำสำหรับแจ้งเตือนต้องเริ่มต้นจาก 1 ชิ้นขึ้นไป
+    if let Ok(threshold) = payload.low_stock_threshold.trim().parse::<i64>() {
+        if threshold < 1 {
+            return Err(AppError::Validation("ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือนต้องเริ่มต้นจาก 1 ชิ้นขึ้นไป".into()));
+        }
+    } else if !payload.low_stock_threshold.trim().is_empty() {
+        return Err(AppError::Validation("ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือนต้องเป็นตัวเลขจำนวนเต็ม".into()));
+    }
+
     settings_repo::upsert_setting(&conn, "store_name", &payload.store_name, Some("ชื่อร้านค้า"))?;
     settings_repo::upsert_setting(&conn, "store_address", &payload.store_address, Some("ที่อยู่ร้านค้า"))?;
     settings_repo::upsert_setting(&conn, "store_phone", &payload.store_phone, Some("เบอร์โทรศัพท์ร้านค้า"))?;

@@ -14,7 +14,6 @@ export interface Product {
   selling_price: number;
   wholesale_price: number;
   current_stock: number;
-  reorder_level: number;
 }
 
 /**

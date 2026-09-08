@@ -185,6 +185,18 @@
     return Object.keys(errors).length === 0;
   }
 
+  function validateStockForm(): boolean {
+    const errors: Record<string, string> = {};
+    if (lowStockAlert) {
+      const val = Number(lowStockThreshold);
+      if (isNaN(val) || val < 1) {
+        errors.low_stock_threshold = "ระดับสต็อกขั้นต่ำต้องเริ่มต้นจาก 1 ชิ้นขึ้นไป";
+      }
+    }
+    formErrors = { ...formErrors, ...errors };
+    return !errors.low_stock_threshold;
+  }
+
   // Saved Snapshot for Dirty State Tracking
   type SavedSnapshot = {
     storeName: string;
@@ -384,7 +396,8 @@
       storePhone = result.store_phone || "";
       storeEmail = result.store_email || "";
       currency = result.currency || "THB";
-      lowStockThreshold = Number(result.low_stock_threshold) || 10;
+      const parsedThreshold = Number(result.low_stock_threshold);
+      lowStockThreshold = !isNaN(parsedThreshold) && parsedThreshold >= 1 ? parsedThreshold : 10;
       lowStockAlert = result.low_stock_alert === "true";
       dailyReport = result.daily_report === "true";
       allowOutOfStockSale = result.allow_out_of_stock_sale === "true";
@@ -413,6 +426,9 @@
   async function saveCategory(cat: SettingCategory): Promise<boolean> {
     if (cat === "store") {
       if (!validateForm()) return false;
+    }
+    if (cat === "stock") {
+      if (!validateStockForm()) return false;
     }
 
     saving = true;
@@ -1423,7 +1439,9 @@
                 {#if lowStockAlert}
                   <div class="fluent-row">
                     <div class="fluent-row-info">
-                      <label for="low-stock-threshold"
+                      <label
+                        for="low-stock-threshold"
+                        class:label-error={!!formErrors.low_stock_threshold}
                         >ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือน (ชิ้น)</label
                       >
                       <span class="fluent-row-desc"
@@ -1434,11 +1452,34 @@
                       <input
                         id="low-stock-threshold"
                         type="number"
-                        min="0"
+                        min="1"
+                        step="1"
                         class="input-field input-modern"
+                        class:input-error={!!formErrors.low_stock_threshold}
                         bind:value={lowStockThreshold}
+                        onkeydown={(e) => {
+                          if (e.key === "-" || e.key === "e" || e.key === "+") {
+                            e.preventDefault();
+                          }
+                        }}
+                        oninput={(e) => {
+                          clearFieldError("low_stock_threshold");
+                          const target = e.currentTarget as HTMLInputElement;
+                          if (target.value !== "" && Number(target.value) < 1) {
+                            lowStockThreshold = 1;
+                          }
+                        }}
+                        onblur={() => {
+                          if (!lowStockThreshold || lowStockThreshold < 1) {
+                            lowStockThreshold = 1;
+                            clearFieldError("low_stock_threshold");
+                          }
+                        }}
                         placeholder="10"
                       />
+                      {#if formErrors.low_stock_threshold}
+                        <span class="error-text">{formErrors.low_stock_threshold}</span>
+                      {/if}
                     </div>
                   </div>
                 {/if}

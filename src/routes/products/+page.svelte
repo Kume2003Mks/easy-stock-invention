@@ -66,7 +66,8 @@
   let pendingProductSelling = $state(0);
   let pendingProductWholesale = $state(0);
   let pendingProductStock = $state(0);
-  let pendingProductReorder = $state(10);
+  let lowStockThreshold = $state(10);
+  let lowStockAlert = $state(true);
 
   // New product form state
   let newProduct = $state({
@@ -78,7 +79,6 @@
     selling_price: 0,
     wholesale_price: 0,
     current_stock: 0,
-    reorder_level: 10,
   });
 
   // Validation error state
@@ -102,6 +102,18 @@
     }
     if (!newProduct.category_id) {
       errors.category_id = "กรุณาเลือกหมวดหมู่";
+    }
+    if (newProduct.cost_price < 0) {
+      errors.cost_price = "ราคาต้นทุนต้องไม่ติดลบ";
+    }
+    if (newProduct.selling_price < 0) {
+      errors.selling_price = "ราคาขายต้องไม่ติดลบ";
+    }
+    if (newProduct.wholesale_price < 0) {
+      errors.wholesale_price = "ราคาขายส่งต้องไม่ติดลบ";
+    }
+    if (newProduct.current_stock < 0) {
+      errors.current_stock = "จำนวนสต็อกเริ่มต้นต้องไม่ติดลบ";
     }
 
     formErrors = errors;
@@ -150,9 +162,20 @@
       if (c) currency = c;
     });
 
-    loadProductsData().then(() => {
+    (async () => {
+      try {
+        const settings = (await invoke("get_settings")) as any;
+        if (settings) {
+          const parsedThreshold = Number(settings.low_stock_threshold);
+          lowStockThreshold = !isNaN(parsedThreshold) && parsedThreshold >= 1 ? parsedThreshold : 10;
+          lowStockAlert = settings.low_stock_alert !== "false";
+        }
+      } catch (e) {
+        console.error("Failed to load settings in products:", e);
+      }
+      await loadProductsData();
       isMounted = true;
-    });
+    })();
 
     return () => {
       unsub();
@@ -189,7 +212,6 @@
       selling_price: 0,
       wholesale_price: 0,
       current_stock: 0,
-      reorder_level: 10,
     };
     formErrors = {};
     showAddModal = true;
@@ -215,7 +237,6 @@
     pendingProductSelling = Number(newProduct.selling_price) || 0;
     pendingProductWholesale = Number(newProduct.wholesale_price) || 0;
     pendingProductStock = Number(newProduct.current_stock) || 0;
-    pendingProductReorder = Number(newProduct.reorder_level) || 10;
 
     showSaveConfirm = true;
   }
@@ -236,7 +257,6 @@
         selling_price: Number(newProduct.selling_price) || 0,
         wholesale_price: Number(newProduct.wholesale_price) || 0,
         current_stock: Number(newProduct.current_stock) || 0,
-        reorder_level: Number(newProduct.reorder_level) || 10,
       };
 
       await invoke("create_product", {
@@ -266,7 +286,6 @@
     selling_price: 0,
     wholesale_price: 0,
     current_stock: 0,
-    reorder_level: 10,
   });
   let editFormErrors = $state<Record<string, string>>({});
 
@@ -288,6 +307,15 @@
     if (!editProduct.category_id) {
       errors.category_id = "กรุณาเลือกหมวดหมู่";
     }
+    if (editProduct.cost_price < 0) {
+      errors.cost_price = "ราคาต้นทุนต้องไม่ติดลบ";
+    }
+    if (editProduct.selling_price < 0) {
+      errors.selling_price = "ราคาขายต้องไม่ติดลบ";
+    }
+    if (editProduct.wholesale_price < 0) {
+      errors.wholesale_price = "ราคาขายส่งต้องไม่ติดลบ";
+    }
     editFormErrors = errors;
     return Object.keys(errors).length === 0;
   }
@@ -303,7 +331,6 @@
       selling_price: p.selling_price,
       wholesale_price: p.wholesale_price,
       current_stock: p.current_stock,
-      reorder_level: p.reorder_level,
     };
     editFormErrors = {};
     showEditModal = true;
@@ -335,7 +362,6 @@
         selling_price: Number(editProduct.selling_price) || 0,
         wholesale_price: Number(editProduct.wholesale_price) || 0,
         current_stock: Number(editProduct.current_stock) || 0,
-        reorder_level: Number(editProduct.reorder_level) || 10,
       };
 
       await invoke("update_product", {
@@ -605,9 +631,11 @@
                 <td>{formatCurrency(p.wholesale_price, currency)}</td>
                 <td>
                   <span
-                    class="badge {p.current_stock > p.reorder_level
-                      ? 'badge-success'
-                      : 'badge-warning'}"
+                    class="badge {p.current_stock <= 0
+                      ? 'badge-danger'
+                      : lowStockAlert && p.current_stock <= lowStockThreshold
+                        ? 'badge-warning'
+                        : 'badge-success'}"
                   >
                     {p.current_stock}
                   </span>
@@ -735,7 +763,7 @@
         />
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!formErrors.cost_price}>
         <label for="product-cost" class="form-label"
           >ต้นทุน ({currencySymbol})</label
         >
@@ -745,12 +773,20 @@
           min="0"
           step="0.01"
           class="input-field"
+          class:input-error={!!formErrors.cost_price}
           placeholder="0.00"
           bind:value={newProduct.cost_price}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearFieldError("cost_price")}
         />
+        {#if formErrors.cost_price}
+          <span class="error-text">{formErrors.cost_price}</span>
+        {/if}
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!formErrors.selling_price}>
         <label for="product-selling" class="form-label"
           >ราคาขาย ({currencySymbol})</label
         >
@@ -760,12 +796,20 @@
           min="0"
           step="0.01"
           class="input-field"
+          class:input-error={!!formErrors.selling_price}
           placeholder="0.00"
           bind:value={newProduct.selling_price}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearFieldError("selling_price")}
         />
+        {#if formErrors.selling_price}
+          <span class="error-text">{formErrors.selling_price}</span>
+        {/if}
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!formErrors.wholesale_price}>
         <label for="product-wholesale" class="form-label"
           >ราคาส่ง ({currencySymbol})</label
         >
@@ -775,12 +819,20 @@
           min="0"
           step="0.01"
           class="input-field"
+          class:input-error={!!formErrors.wholesale_price}
           placeholder="0.00"
           bind:value={newProduct.wholesale_price}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearFieldError("wholesale_price")}
         />
+        {#if formErrors.wholesale_price}
+          <span class="error-text">{formErrors.wholesale_price}</span>
+        {/if}
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!formErrors.current_stock}>
         <label for="product-stock" class="form-label">สต็อกเริ่มต้น</label>
         <input
           id="product-stock"
@@ -788,23 +840,17 @@
           min="0"
           step="1"
           class="input-field"
+          class:input-error={!!formErrors.current_stock}
           placeholder="0"
           bind:value={newProduct.current_stock}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearFieldError("current_stock")}
         />
-      </div>
-
-      <div class="form-group">
-        <label for="product-reorder" class="form-label">ระดับสต็อกขั้นต่ำ</label
-        >
-        <input
-          id="product-reorder"
-          type="number"
-          min="0"
-          step="1"
-          class="input-field"
-          placeholder="10"
-          bind:value={newProduct.reorder_level}
-        />
+        {#if formErrors.current_stock}
+          <span class="error-text">{formErrors.current_stock}</span>
+        {/if}
       </div>
     </div>
 
@@ -1003,7 +1049,7 @@
         />
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!editFormErrors.cost_price}>
         <label for="edit-product-cost" class="form-label"
           >ต้นทุน ({currencySymbol})</label
         >
@@ -1013,12 +1059,20 @@
           min="0"
           step="0.01"
           class="input-field"
+          class:input-error={!!editFormErrors.cost_price}
           placeholder="0.00"
           bind:value={editProduct.cost_price}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearEditFieldError("cost_price")}
         />
+        {#if editFormErrors.cost_price}
+          <span class="error-text">{editFormErrors.cost_price}</span>
+        {/if}
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!editFormErrors.selling_price}>
         <label for="edit-product-selling" class="form-label"
           >ราคาขาย ({currencySymbol})</label
         >
@@ -1028,12 +1082,20 @@
           min="0"
           step="0.01"
           class="input-field"
+          class:input-error={!!editFormErrors.selling_price}
           placeholder="0.00"
           bind:value={editProduct.selling_price}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearEditFieldError("selling_price")}
         />
+        {#if editFormErrors.selling_price}
+          <span class="error-text">{editFormErrors.selling_price}</span>
+        {/if}
       </div>
 
-      <div class="form-group">
+      <div class="form-group" class:has-error={!!editFormErrors.wholesale_price}>
         <label for="edit-product-wholesale" class="form-label"
           >ราคาส่ง ({currencySymbol})</label
         >
@@ -1043,24 +1105,17 @@
           min="0"
           step="0.01"
           class="input-field"
+          class:input-error={!!editFormErrors.wholesale_price}
           placeholder="0.00"
           bind:value={editProduct.wholesale_price}
+          onkeydown={(e) => {
+            if (e.key === "-" || e.key === "e") e.preventDefault();
+          }}
+          oninput={() => clearEditFieldError("wholesale_price")}
         />
-      </div>
-
-      <div class="form-group">
-        <label for="edit-product-reorder" class="form-label"
-          >ระดับสต็อกขั้นต่ำ</label
-        >
-        <input
-          id="edit-product-reorder"
-          type="number"
-          min="0"
-          step="1"
-          class="input-field"
-          placeholder="10"
-          bind:value={editProduct.reorder_level}
-        />
+        {#if editFormErrors.wholesale_price}
+          <span class="error-text">{editFormErrors.wholesale_price}</span>
+        {/if}
       </div>
     </div>
 
@@ -1104,10 +1159,11 @@
         <div class="summary-stock">
           <span class="stock-label">สต็อกปัจจุบัน</span>
           <span
-            class="badge {adjustTargetProduct.current_stock >
-            adjustTargetProduct.reorder_level
-              ? 'badge-success'
-              : 'badge-warning'}"
+            class="badge {adjustTargetProduct.current_stock <= 0
+              ? 'badge-danger'
+              : lowStockAlert && adjustTargetProduct.current_stock <= lowStockThreshold
+                ? 'badge-warning'
+                : 'badge-success'}"
           >
             {adjustTargetProduct.current_stock} ชิ้น
           </span>
@@ -1464,6 +1520,11 @@
   .badge-warning {
     background-color: #fff3e0;
     color: #f57c00;
+  }
+
+  .badge-danger {
+    background-color: #ffebee;
+    color: var(--color-danger);
   }
 
   .empty-state {

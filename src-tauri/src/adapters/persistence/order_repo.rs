@@ -935,14 +935,14 @@ mod tests {
         conn.execute_batch(schema).unwrap();
 
         conn.execute(
-            "INSERT INTO Products (product_id, barcode, name, selling_price, current_stock, reorder_level)
-             VALUES ('p1', '885000000001', 'น้ำดื่ม 500ml', 7.0, 10, 2)",
+            "INSERT INTO Products (product_id, barcode, name, selling_price, current_stock)
+             VALUES ('p1', '885000000001', 'น้ำดื่ม 500ml', 7.0, 10)",
             [],
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO Products (product_id, barcode, name, selling_price, current_stock, reorder_level)
-             VALUES ('p2', '885000000002', 'ขนม', 20.0, 5, 2)",
+            "INSERT INTO Products (product_id, barcode, name, selling_price, current_stock)
+             VALUES ('p2', '885000000002', 'ขนม', 20.0, 5)",
             [],
         )
         .unwrap();
