@@ -1054,7 +1054,7 @@
                       type="email"
                       class="input-field input-modern"
                       bind:value={storeEmail}
-                      placeholder="เช่น contact@easystock.com"
+                      placeholder="เช่น contact@example.com"
                     />
                   </div>
                 </div>
