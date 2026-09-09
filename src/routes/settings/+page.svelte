@@ -61,6 +61,7 @@
   let printerTarget = $state("");
   let promptpayId = $state("");
   let promptpayQrEnabled = $state(false);
+  let promptpayAmountEnabled = $state(true);
   let printerCodepage = $state("26");
   let receiptFont = $state("sarabun");
   let testingPrint = $state(false);
@@ -202,6 +203,22 @@
     return !errors.low_stock_threshold;
   }
 
+  function validatePrinterForm(): boolean {
+    const errors: Record<string, string> = {};
+    if (promptpayQrEnabled) {
+      const cleanId = promptpayId.replace(/[-\s]/g, "");
+      if (!cleanId) {
+        errors.promptpay_id = "กรุณากรอกหมายเลข PromptPay (จำเป็นเมื่อเปิดใช้งานพร้อมเพย์)";
+      } else if (!/^\d+$/.test(cleanId)) {
+        errors.promptpay_id = "หมายเลข PromptPay ต้องเป็นตัวเลขเท่านั้น";
+      } else if (cleanId.length !== 10 && cleanId.length !== 13 && cleanId.length !== 15) {
+        errors.promptpay_id = `หมายเลข PromptPay ต้องเป็นเบอร์โทร 10 หลัก หรือเลขบัตรประชาชน 13 หลัก (ปัจจุบันมี ${cleanId.length} หลัก)`;
+      }
+    }
+    formErrors = { ...formErrors, ...errors };
+    return !errors.promptpay_id;
+  }
+
   // Saved Snapshot for Dirty State Tracking
   type SavedSnapshot = {
     storeName: string;
@@ -223,6 +240,7 @@
     isManualUsb: boolean;
     promptpayId: string;
     promptpayQrEnabled: boolean;
+    promptpayAmountEnabled: boolean;
     printerCodepage: string;
     receiptFont: string;
   };
@@ -250,6 +268,7 @@
       isManualUsb,
       promptpayId,
       promptpayQrEnabled,
+      promptpayAmountEnabled,
       printerCodepage,
       receiptFont,
     };
@@ -277,6 +296,7 @@
         isManualUsb !== savedSnapshot.isManualUsb ||
         promptpayId !== savedSnapshot.promptpayId ||
         promptpayQrEnabled !== savedSnapshot.promptpayQrEnabled ||
+        promptpayAmountEnabled !== savedSnapshot.promptpayAmountEnabled ||
         printerCodepage !== savedSnapshot.printerCodepage ||
         receiptFont !== savedSnapshot.receiptFont
       );
@@ -313,6 +333,7 @@
       isManualUsb = savedSnapshot.isManualUsb;
       promptpayId = savedSnapshot.promptpayId;
       promptpayQrEnabled = savedSnapshot.promptpayQrEnabled;
+      promptpayAmountEnabled = savedSnapshot.promptpayAmountEnabled;
       printerCodepage = savedSnapshot.printerCodepage;
       receiptFont = savedSnapshot.receiptFont;
       syncUsbSelection();
@@ -440,6 +461,10 @@
       promptpayQrEnabled = result.promptpay_qr_enabled
         ? result.promptpay_qr_enabled === "true"
         : Boolean(result.promptpay_id?.trim());
+      promptpayAmountEnabled =
+        result.promptpay_amount_enabled !== undefined
+          ? result.promptpay_amount_enabled !== "false"
+          : true;
       printerCodepage = result.printer_codepage || "26";
       receiptFont = result.receipt_font || "sarabun";
 
@@ -456,6 +481,9 @@
   async function saveCategory(cat: SettingCategory): Promise<boolean> {
     if (cat === "store") {
       if (!validateForm()) return false;
+    }
+    if (cat === "printer") {
+      if (!validatePrinterForm()) return false;
     }
     if (cat === "stock") {
       if (!validateStockForm()) return false;
@@ -493,6 +521,7 @@
           printer_target: targetToSave,
           promptpay_id: promptpayId,
           promptpay_qr_enabled: String(promptpayQrEnabled),
+          promptpay_amount_enabled: String(promptpayAmountEnabled),
           printer_codepage: printerCodepage,
           receipt_font: receiptFont,
         },
@@ -544,6 +573,10 @@
       return;
     }
 
+    if (promptpayQrEnabled && !validatePrinterForm()) {
+      return;
+    }
+
     testingPrint = true;
     try {
       const targetToTest =
@@ -562,6 +595,7 @@
           paper_size: paperSize,
           promptpay_id: promptpayId,
           promptpay_qr_enabled: String(promptpayQrEnabled),
+          promptpay_amount_enabled: String(promptpayAmountEnabled),
           store_name: storeName,
           store_address: storeAddress,
           store_phone: storePhone,
@@ -1407,6 +1441,11 @@
                         <input
                           type="checkbox"
                           bind:checked={promptpayQrEnabled}
+                          onchange={() => {
+                            if (!promptpayQrEnabled) {
+                              clearFieldError("promptpay_id");
+                            }
+                          }}
                         />
                         <span class="toggle-slider"></span>
                       </label>
@@ -1416,7 +1455,9 @@
                   {#if promptpayQrEnabled}
                     <div class="fluent-row">
                       <div class="fluent-row-info">
-                        <label for="promptpay-id">หมายเลข PromptPay</label>
+                        <label for="promptpay-id" class:label-error={!!formErrors.promptpay_id}>
+                          หมายเลข PromptPay <span class="required-star">*</span>
+                        </label>
                         <span class="fluent-row-desc"
                           >เบอร์โทรศัพท์ 10 หลัก หรือ เลขประจำตัวประชาชน 13 หลัก</span
                         >
@@ -1426,9 +1467,37 @@
                           id="promptpay-id"
                           type="text"
                           class="input-field input-modern"
+                          class:input-error={!!formErrors.promptpay_id}
                           bind:value={promptpayId}
-                          placeholder="0812345678 หรือ 1234567890123"
+                          oninput={() => clearFieldError("promptpay_id")}
+                          placeholder="เบอร์โทรศัพท์ 10 หลัก"
+                          required
                         />
+                        {#if formErrors.promptpay_id}
+                          <span class="error-text">{formErrors.promptpay_id}</span>
+                        {/if}
+                      </div>
+                    </div>
+
+                    <div class="fluent-row fluent-row-action">
+                      <div class="fluent-row-info">
+                        <span class="fluent-row-title"
+                          >ระบุยอดเงินใน QR Code ตามยอดบิล</span
+                        >
+                        <span class="fluent-row-desc"
+                          >{promptpayAmountEnabled
+                            ? "ระบุยอดเงินที่ต้องชำระใน QR Code โดยอัตโนมัติ (ลูกค้าสแกนแล้วยอดเงินจะขึ้นทันที)"
+                            : "ไม่ระบุยอดเงินใน QR Code (ลูกค้าเป็นผู้กรอกยอดเงินเองเมื่อสแกน)"}</span
+                        >
+                      </div>
+                      <div class="fluent-row-control">
+                        <label class="toggle-switch">
+                          <input
+                            type="checkbox"
+                            bind:checked={promptpayAmountEnabled}
+                          />
+                          <span class="toggle-slider"></span>
+                        </label>
                       </div>
                     </div>
                   {/if}
@@ -2417,6 +2486,12 @@
 
   .label-error {
     color: var(--color-danger);
+  }
+
+  .required-star {
+    color: var(--color-danger);
+    font-weight: 700;
+    margin-left: 2px;
   }
 
   .input-error {

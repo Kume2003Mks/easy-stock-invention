@@ -33,10 +33,16 @@ pub struct SettingsPayload {
     pub promptpay_id: String,
     #[serde(default = "default_false")]
     pub promptpay_qr_enabled: String,
+    #[serde(default = "default_true_str")]
+    pub promptpay_amount_enabled: String,
     #[serde(default = "default_codepage_str")]
     pub printer_codepage: String,
     #[serde(default = "default_receipt_font")]
     pub receipt_font: String,
+}
+
+fn default_true_str() -> String {
+    "true".to_string()
 }
 
 fn default_print_behavior() -> String {
@@ -71,6 +77,7 @@ impl Default for SettingsPayload {
             printer_target: String::new(),
             promptpay_id: String::new(),
             promptpay_qr_enabled: "false".to_string(),
+            promptpay_amount_enabled: "true".to_string(),
             printer_codepage: "26".to_string(),
             receipt_font: "sarabun".to_string(),
         }
@@ -137,6 +144,9 @@ pub fn get_settings(state: State<'_, Mutex<Connection>>) -> Result<SettingsPaylo
     if let Some(v) = settings_repo::get_setting(&conn, "promptpay_qr_enabled")? {
         payload.promptpay_qr_enabled = v;
     }
+    if let Some(v) = settings_repo::get_setting(&conn, "promptpay_amount_enabled")? {
+        payload.promptpay_amount_enabled = v;
+    }
     if let Some(v) = settings_repo::get_setting(&conn, "printer_codepage")? {
         payload.printer_codepage = v;
     }
@@ -176,6 +186,14 @@ pub fn save_settings(
         return Err(AppError::Validation("ระดับสต็อกขั้นต่ำสำหรับแจ้งเตือนต้องเป็นตัวเลขจำนวนเต็ม".into()));
     }
 
+    // ตรวจสอบหมายเลข PromptPay เมื่อเปิดใช้งาน QR Code พร้อมเพย์
+    if payload.promptpay_qr_enabled == "true" {
+        let clean_id = payload.promptpay_id.replace(&['-', ' '][..], "");
+        if clean_id.trim().is_empty() {
+            return Err(AppError::Validation("กรุณาระบุหมายเลข PromptPay เมื่อเปิดใช้งาน QR Code พร้อมเพย์".into()));
+        }
+    }
+
     // คำนวณค่าเดิม auto_print_enabled และ receipt_preview_enabled เพื่อความเข้ากันได้ย้อนหลัง
     let (auto_print, receipt_preview) = match payload.print_behavior.as_str() {
         "direct" => ("true", "false"),
@@ -200,6 +218,7 @@ pub fn save_settings(
     settings_repo::upsert_setting(&conn, "printer_target", &payload.printer_target, Some("ที่อยู่เครื่องพิมพ์ เช่น 192.168.1.200:9100 หรือชื่อเครื่องพิมพ์"))?;
     settings_repo::upsert_setting(&conn, "promptpay_id", &payload.promptpay_id, Some("เลข PromptPay สำหรับ QR บนใบเสร็จ"))?;
     settings_repo::upsert_setting(&conn, "promptpay_qr_enabled", &payload.promptpay_qr_enabled, Some("เปิด/ปิดการพิมพ์ QR พร้อมเพย์บนใบเสร็จ"))?;
+    settings_repo::upsert_setting(&conn, "promptpay_amount_enabled", &payload.promptpay_amount_enabled, Some("กำหนดให้ระบุยอดเงินใน QR Code พร้อมเพย์ตามยอดบิล (true=ระบุยอด, false=ไม่ระบุยอด ให้ลูกค้ากรอกเอง)"))?;
     settings_repo::upsert_setting(&conn, "printer_codepage", &payload.printer_codepage, Some("ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"))?;
     settings_repo::upsert_setting(&conn, "receipt_font", &payload.receipt_font, Some("รูปแบบฟอนต์ใบเสร็จ (sarabun=กราฟิกบิตแมปความคมชัดสูง, device=ฟอนต์เครื่องพิมพ์)"))?;
 
@@ -280,6 +299,25 @@ mod tests {
         assert_eq!(settings_repo::get_setting(&conn, "print_behavior").unwrap().unwrap(), "none");
         assert_eq!(settings_repo::get_setting(&conn, "auto_print_enabled").unwrap().unwrap(), "false");
         assert_eq!(settings_repo::get_setting(&conn, "receipt_preview_enabled").unwrap().unwrap(), "false");
+    }
+
+    #[test]
+    fn test_promptpay_id_required_when_enabled() {
+        let payload_empty = SettingsPayload {
+            promptpay_qr_enabled: "true".to_string(),
+            promptpay_id: "".to_string(),
+            ..SettingsPayload::default()
+        };
+        let clean_id = payload_empty.promptpay_id.replace(&['-', ' '][..], "");
+        assert!(clean_id.trim().is_empty());
+
+        let payload_valid = SettingsPayload {
+            promptpay_qr_enabled: "true".to_string(),
+            promptpay_id: "0812345678".to_string(),
+            ..SettingsPayload::default()
+        };
+        let clean_valid = payload_valid.promptpay_id.replace(&['-', ' '][..], "");
+        assert!(!clean_valid.trim().is_empty());
     }
 }
 

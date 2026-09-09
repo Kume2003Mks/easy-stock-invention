@@ -272,7 +272,8 @@ pub mod gdi_raster {
         if data.order_type == "SALE" {
             if let Some(ref pp_id) = data.promptpay_id {
                 if !pp_id.trim().is_empty() && (data.total_amount > 0.0 || data.order_no == "TEST-PRINT") {
-                    if let Ok(payload) = promptpay_payload(pp_id, data.total_amount) {
+                    let amount = if data.promptpay_amount_enabled { data.total_amount } else { 0.0 };
+                    if let Ok(payload) = promptpay_payload(pp_id, amount) {
                         y += draw_dashed_line(hdc, left, right, y + 4, is_draw);
                         let h_qr_lbl = draw_text_line(hdc, "สแกนชำระเงินผ่าน PromptPay", fonts.body, left, y, right, DT_CENTER, is_draw);
                         y += h_qr_lbl + 8;
@@ -804,6 +805,34 @@ pub fn qr_raster_bytes(data: &str, module_size: usize) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+/// แปลง QrCode เป็น SVG String ความคมชัดสูง สำหรับแสดงผลบนหน้าจอ UI
+pub fn qr_to_svg(code: &qrcode::QrCode) -> String {
+    let matrix_w = code.width();
+    let colors = code.to_colors();
+    let quiet = 2;
+    let total_w = matrix_w + quiet * 2;
+    let mut rects = String::new();
+
+    for y in 0..matrix_w {
+        for x in 0..matrix_w {
+            if colors[y * matrix_w + x] == qrcode::Color::Dark {
+                use std::fmt::Write;
+                let _ = write!(
+                    rects,
+                    r#"<rect x="{}" y="{}" width="1" height="1"/>"#,
+                    x + quiet,
+                    y + quiet
+                );
+            }
+        }
+    }
+
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000">{}</g></svg>"##,
+        total_w, total_w, rects
+    )
+}
+
 // ==========================================================
 // PromptPay QR Payload (EMVCo) + CRC16-CCITT
 // ==========================================================
@@ -952,7 +981,8 @@ impl PrintReceiptUseCase {
         if data.order_type == "SALE" {
             if let Some(ref pp_id) = data.promptpay_id {
                 if !pp_id.trim().is_empty() && (data.total_amount > 0.0 || data.order_no == "TEST-PRINT") {
-                    if let Ok(payload) = promptpay_payload(pp_id, data.total_amount) {
+                    let amount = if data.promptpay_amount_enabled { data.total_amount } else { 0.0 };
+                    if let Ok(payload) = promptpay_payload(pp_id, amount) {
                         b.push_separator();
                         b.push_centered("สแกนชำระเงินผ่าน PromptPay");
                         if let Some(raster) = qr_raster_bytes(&payload, data.paper_size.qr_module_size()) {
@@ -1016,6 +1046,7 @@ mod tests {
             change_amount: 6.0,
             note: None,
             promptpay_id: None,
+            promptpay_amount_enabled: true,
             paper_size: paper,
             codepage: 26,
             receipt_font: "device".to_string(),
@@ -1235,5 +1266,36 @@ mod tests {
         // สลิปคืนเงินต้องมีข้อความ "(คืนสินค้า)" ใน TIS-620
         let marker = tis620::encode("(คืนสินค้า)");
         assert!(bytes.windows(marker.len()).any(|w| w == marker.as_slice()));
+    }
+
+    #[test]
+    fn test_promptpay_amount_toggle() {
+        // ทดสอบเมื่อเปิด promptpay_amount_enabled = true (Dynamic QR มียอดเงิน)
+        let payload_dynamic = promptpay_payload("0812345678", 150.0).unwrap();
+        assert!(payload_dynamic.contains("010212")); // Dynamic indicator
+        assert!(payload_dynamic.contains("5406150.00")); // Tag 54 มีจำนวนเงิน
+
+        // ทดสอบเมื่อปิด promptpay_amount_enabled = false (Static QR ไม่ระบุยอดเงิน)
+        let payload_static = promptpay_payload("0812345678", 0.0).unwrap();
+        assert!(payload_static.contains("010211")); // Static indicator
+        assert!(!payload_static.contains("5406")); // ไม่มี Tag 54
+
+        // ตรวจสอบใน PrintReceiptUseCase
+        let mut data = sample_data(PaperSize::Mm80);
+        data.promptpay_id = Some("0812345678".to_string());
+        data.promptpay_amount_enabled = false;
+        let bytes_static = PrintReceiptUseCase::build_receipt_bytes(&data);
+        assert!(bytes_static.windows(4).any(|w| w == [0x1D, b'v', b'0', 0x00]));
+    }
+
+    #[test]
+    fn test_qr_to_svg() {
+        use qrcode::{EcLevel, QrCode};
+        let payload = promptpay_payload("0812345678", 100.0).unwrap();
+        let code = QrCode::with_error_correction_level(payload.as_bytes(), EcLevel::M).unwrap();
+        let svg = qr_to_svg(&code);
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.ends_with("</svg>"));
+        assert!(svg.contains("<rect"));
     }
 }

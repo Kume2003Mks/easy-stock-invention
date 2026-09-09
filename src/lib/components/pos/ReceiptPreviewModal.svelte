@@ -9,10 +9,12 @@
   let {
     open = false,
     order = null,
+    promptpayAmountEnabled = undefined,
     onClose = () => {},
   }: {
     open?: boolean;
     order?: Order | null;
+    promptpayAmountEnabled?: boolean;
     onClose?: () => void;
   } = $props();
 
@@ -106,7 +108,10 @@
     if (!order || printing) return;
     printing = true;
     try {
-      await invoke("print_receipt", { orderId: order.order_id });
+      await invoke("print_receipt", {
+        orderId: order.order_id,
+        promptpayAmountEnabled,
+      });
       printSuccess = true;
 
       // ปิด modal อัตโนมัติหลังพิมพ์สำเร็จ 1.2 วินาที

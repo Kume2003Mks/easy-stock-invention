@@ -20,6 +20,8 @@ pub struct CheckoutInput {
     pub paid_amount: f64,
     #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
+    pub promptpay_amount_enabled: Option<bool>,
     pub items: Vec<CheckoutInputItem>,
 }
 
@@ -956,6 +958,7 @@ mod tests {
             payment_method: "CASH".to_string(),
             paid_amount: price * qty as f64,
             note: None,
+            promptpay_amount_enabled: None,
             items: vec![CheckoutInputItem {
                 product_id: pid.to_string(),
                 product_name: name.to_string(),

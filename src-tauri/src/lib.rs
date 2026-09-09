@@ -51,6 +51,7 @@ pub fn run() {
             adapters::commands::print_receipt,
             adapters::commands::print_test_receipt,
             adapters::commands::get_system_printers,
+            adapters::commands::get_promptpay_qr,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

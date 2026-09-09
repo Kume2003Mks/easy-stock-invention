@@ -58,6 +58,7 @@
   let showClearConfirm = $state(false);
   let heldCount = $state(0);
   let previewOrder = $state<Order | null>(null);
+  let previewPromptpayAmountEnabled = $state<boolean | undefined>(undefined);
   let printBehavior = $state<"direct" | "preview" | "none">("direct");
   let printerConnection = $state("none");
   let receiptPreviewEnabled = $state(false);
@@ -308,7 +309,7 @@
   }
 
   // ---------- ชำระเงินสำเร็จ ----------
-  async function handleSaleCompleted(order: Order) {
+  async function handleSaleCompleted(order: Order, promptpayAmountEnabled?: boolean) {
     cart = [];
     discountAmount = 0;
     const orderNo = order?.order_no ? `บิล ${order.order_no}` : "";
@@ -331,6 +332,7 @@
     await loadProducts();
     if (printBehavior === "preview") {
       previewOrder = order;
+      previewPromptpayAmountEnabled = promptpayAmountEnabled;
     }
   }
 
@@ -727,7 +729,11 @@
 <ReceiptPreviewModal
   open={previewOrder !== null}
   order={previewOrder}
-  onClose={() => (previewOrder = null)}
+  promptpayAmountEnabled={previewPromptpayAmountEnabled}
+  onClose={() => {
+    previewOrder = null;
+    previewPromptpayAmountEnabled = undefined;
+  }}
 />
 
 <ConfirmModal

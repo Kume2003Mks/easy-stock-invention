@@ -26,6 +26,7 @@ struct ReceiptSettings {
     printer_connection: String,
     printer_target: String,
     promptpay_id: Option<String>,
+    promptpay_amount_enabled: bool,
     printer_codepage: u8,
     receipt_font: String,
 }
@@ -42,6 +43,7 @@ impl Default for ReceiptSettings {
             printer_connection: "network".to_string(),
             printer_target: String::new(),
             promptpay_id: None,
+            promptpay_amount_enabled: true,
             printer_codepage: 26,
             receipt_font: "sarabun".to_string(),
         }
@@ -89,6 +91,8 @@ fn load_receipt_settings(conn: &Connection) -> ReceiptSettings {
     } else {
         None
     };
+    let amount_enabled = get("promptpay_amount_enabled").map(|v| v != "false").unwrap_or(true);
+    s.promptpay_amount_enabled = amount_enabled;
     if let Some(v) = get("printer_codepage") {
         s.printer_codepage = v.parse::<u8>().unwrap_or(26);
     }
@@ -124,6 +128,7 @@ fn build_receipt_data(order: &Order, s: &ReceiptSettings) -> ReceiptData {
         change_amount: order.change_amount,
         note: order.note.clone(),
         promptpay_id: s.promptpay_id.clone(),
+        promptpay_amount_enabled: s.promptpay_amount_enabled,
         paper_size: s.paper_size,
         codepage: s.printer_codepage,
         receipt_font: s.receipt_font.clone(),
@@ -168,8 +173,10 @@ pub fn create_order(
 
     let order = order_repo::create_order(&conn, &payload)?;
 
-    // Auto-Print: พิมพ์เงียบเบื้องหลังเมื่อเปิดใช้งานและไม่ได้เปิดโหมดดูตัวอย่างก่อนพิมพ์
-    let settings = load_receipt_settings(&conn);
+    let mut settings = load_receipt_settings(&conn);
+    if let Some(pp_amount) = payload.promptpay_amount_enabled {
+        settings.promptpay_amount_enabled = pp_amount;
+    }
     if settings.auto_print_enabled && !settings.receipt_preview_enabled {
         spawn_background_print(order.clone(), settings);
     }
@@ -334,11 +341,18 @@ pub fn create_return_order(
 
 /// พิมพ์ใบเสร็จตาม order_id — ใช้จากปุ่ม "พิมพ์ใบเสร็จ" ในหน้า Preview และ Reprint
 #[tauri::command]
-pub fn print_receipt(state: State<'_, Mutex<Connection>>, order_id: String) -> Result<(), AppError> {
+pub fn print_receipt(
+    state: State<'_, Mutex<Connection>>,
+    order_id: String,
+    promptpay_amount_enabled: Option<bool>,
+) -> Result<(), AppError> {
     let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
     let order = order_repo::get_order_detail(&conn, &order_id)?;
-    let settings = load_receipt_settings(&conn);
+    let mut settings = load_receipt_settings(&conn);
+    if let Some(pp_amount) = promptpay_amount_enabled {
+        settings.promptpay_amount_enabled = pp_amount;
+    }
 
     let conn_type = PrinterConnection::from_setting(&settings.printer_connection);
     if conn_type == PrinterConnection::None {
@@ -362,6 +376,7 @@ pub struct TestPrintPayload {
     pub paper_size: Option<String>,
     pub promptpay_id: Option<String>,
     pub promptpay_qr_enabled: Option<String>,
+    pub promptpay_amount_enabled: Option<String>,
     pub store_name: Option<String>,
     pub store_address: Option<String>,
     pub store_phone: Option<String>,
@@ -395,6 +410,9 @@ pub fn print_test_receipt(
             if qr_en == "false" {
                 settings.promptpay_id = None;
             }
+        }
+        if let Some(pp_am) = p.promptpay_amount_enabled {
+            settings.promptpay_amount_enabled = pp_am != "false";
         }
         if let Some(n) = p.store_name {
             if !n.trim().is_empty() {
@@ -447,10 +465,53 @@ pub fn print_test_receipt(
         change_amount: 0.0,
         note: Some("สลิปทดสอบเครื่องพิมพ์ใบเสร็จ".to_string()),
         promptpay_id: settings.promptpay_id.clone(),
+        promptpay_amount_enabled: settings.promptpay_amount_enabled,
         paper_size: settings.paper_size,
         codepage: settings.printer_codepage,
         receipt_font: settings.receipt_font.clone(),
     };
 
     PrintReceiptUseCase::execute(port.as_ref(), &data).map_err(AppError::Printer)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptPayQrResponse {
+    pub promptpay_id: String,
+    pub promptpay_qr_enabled: bool,
+    pub promptpay_amount_enabled: bool,
+    pub qr_svg: Option<String>,
+}
+
+/// สร้าง PromptPay QR สำหรับแสดงผลบนหน้าจอชำระเงิน POS หรือหน้าพรีวิว
+#[tauri::command]
+pub fn get_promptpay_qr(
+    state: State<'_, Mutex<Connection>>,
+    amount: Option<f64>,
+    force_amount: Option<bool>,
+) -> Result<PromptPayQrResponse, AppError> {
+    let conn = state.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+    let get = |k: &str| settings_repo::get_setting(&conn, k).ok().flatten();
+
+    let id = get("promptpay_id").unwrap_or_default();
+    let qr_enabled = get("promptpay_qr_enabled").map(|v| v == "true").unwrap_or(false);
+    let amount_enabled_setting = get("promptpay_amount_enabled").map(|v| v != "false").unwrap_or(true);
+    let use_amount = force_amount.unwrap_or(amount_enabled_setting);
+
+    let mut qr_svg = None;
+    if !id.trim().is_empty() {
+        let final_amount = if use_amount { amount.unwrap_or(0.0) } else { 0.0 };
+        if let Ok(payload) = crate::use_cases::print_receipt::promptpay_payload(&id, final_amount) {
+            if let Ok(code) = qrcode::QrCode::with_error_correction_level(payload.as_bytes(), qrcode::EcLevel::M) {
+                qr_svg = Some(crate::use_cases::print_receipt::qr_to_svg(&code));
+            }
+        }
+    }
+
+    Ok(PromptPayQrResponse {
+        promptpay_id: id,
+        promptpay_qr_enabled: qr_enabled,
+        promptpay_amount_enabled: use_amount,
+        qr_svg,
+    })
 }

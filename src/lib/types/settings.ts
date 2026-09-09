@@ -19,8 +19,19 @@ export interface AppSettings {
   printer_target: string;
   promptpay_id: string;
   promptpay_qr_enabled?: string;
+  promptpay_amount_enabled?: string;
   printer_codepage?: string;
   receipt_font?: string;
+}
+
+/**
+ * ผลลัพธ์การสร้าง PromptPay QR จาก backend
+ */
+export interface PromptPayQrResponse {
+  promptpayId: string;
+  promptpayQrEnabled: boolean;
+  promptpayAmountEnabled: boolean;
+  qrSvg: string | null;
 }
 
 /**

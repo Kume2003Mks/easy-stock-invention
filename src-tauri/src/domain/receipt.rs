@@ -69,6 +69,9 @@ pub struct ReceiptData {
     pub note: Option<String>,
     /// เลข PromptPay สำหรับสร้าง QR บนสลิป (ถ้ามี)
     pub promptpay_id: Option<String>,
+    /// กำหนดให้ระบุยอดเงินใน PromptPay QR ตามยอดบิลหรือไม่ (true = Dynamic, false = Static)
+    #[serde(default = "default_true")]
+    pub promptpay_amount_enabled: bool,
     pub paper_size: PaperSize,
     /// Code page สำหรับภาษาไทย (ค่าเริ่มต้น 26 = TIS18 บน Epson)
     #[serde(default = "default_codepage")]
@@ -76,6 +79,10 @@ pub struct ReceiptData {
     /// รูปแบบฟอนต์ใบเสร็จ ("sarabun" หรือ "device")
     #[serde(default = "default_receipt_font")]
     pub receipt_font: String,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_codepage() -> u8 {
