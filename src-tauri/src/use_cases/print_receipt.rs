@@ -169,13 +169,13 @@ pub mod gdi_raster {
         let left = margin;
         let right = width - margin;
 
-        // 1. หัวบิล — ชื่อร้านค้า (Bold)
-        let h = draw_text_line(hdc, &data.store_name, fonts.store_title, left, y, right, DT_CENTER, is_draw);
+        // 1. หัวบิล — ชื่อร้านค้า (Bold) ตัดขึ้นบรรทัดใหม่อัตโนมัติหากชื่อยาว ไม่ให้ตกขอบกระดาษ
+        let h = draw_text_line(hdc, &data.store_name, fonts.store_title, left, y, right, DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL, is_draw);
         y += h + 6;
 
         // ที่อยู่ร้าน
         if !data.store_address.trim().is_empty() {
-            let h = draw_text_line(hdc, &data.store_address, fonts.small, left, y, right, DT_CENTER | DT_WORDBREAK, is_draw);
+            let h = draw_text_line(hdc, &data.store_address, fonts.small, left, y, right, DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL, is_draw);
             y += h + 4;
         }
 
@@ -210,7 +210,7 @@ pub mod gdi_raster {
         // รายการสินค้า
         for item in &data.items {
             // บรรทัดบน: ชื่อสินค้า (ตัดคำอัตโนมัติหากยาว)
-            let item_name_h = draw_text_line(hdc, &item.name, fonts.body, left, y, right, DT_LEFT | DT_WORDBREAK, is_draw);
+            let item_name_h = draw_text_line(hdc, &item.name, fonts.body, left, y, right, DT_LEFT | DT_WORDBREAK | DT_EDITCONTROL, is_draw);
             y += item_name_h + 3;
 
             // บรรทัดล่าง: จำนวน x ราคา (ซ้าย) / รวม (ขวา)
@@ -263,7 +263,7 @@ pub mod gdi_raster {
                 y += draw_dashed_line(hdc, left, right, y + 4, is_draw);
                 let h_note_lbl = draw_text_line(hdc, "หมายเหตุ:", fonts.small, left, y, right, DT_LEFT, is_draw);
                 y += h_note_lbl + 2;
-                let h_note = draw_text_line(hdc, note.trim(), fonts.small, left + 10, y, right, DT_LEFT | DT_WORDBREAK, is_draw);
+                let h_note = draw_text_line(hdc, note.trim(), fonts.small, left + 10, y, right, DT_LEFT | DT_WORDBREAK | DT_EDITCONTROL, is_draw);
                 y += h_note + 6;
             }
         }
@@ -486,6 +486,99 @@ pub fn thai_display_width(text: &str) -> usize {
     text.chars().filter(|c| !is_thai_combining(*c)).count()
 }
 
+/// ตัดข้อความขึ้นบรรทัดใหม่ตามความกว้าง display width โดยคำนึงถึงสระ/วรรณยุกต์ไทยไม่ให้ขาดออกจากพยัญชนะ
+pub fn wrap_thai_text(text: &str, max_width: usize) -> Vec<String> {
+    if max_width == 0 || text.trim().is_empty() {
+        return if text.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![text.to_string()]
+        };
+    }
+
+    let mut lines = Vec::new();
+    for raw_line in text.replace("\r\n", "\n").split('\n') {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if thai_display_width(trimmed) <= max_width {
+            lines.push(trimmed.to_string());
+            continue;
+        }
+
+        let mut cur_line = String::new();
+        let mut cur_w = 0;
+
+        // แยกตามช่องว่าง (word break) ก่อนถ้ามี
+        let parts: Vec<&str> = trimmed.split(' ').collect();
+        if parts.len() > 1 {
+            for part in parts {
+                if part.is_empty() {
+                    continue;
+                }
+                let part_w = thai_display_width(part);
+                let space_w = if cur_w > 0 { 1 } else { 0 };
+
+                if cur_w + space_w + part_w <= max_width {
+                    if cur_w > 0 {
+                        cur_line.push(' ');
+                        cur_w += 1;
+                    }
+                    cur_line.push_str(part);
+                    cur_w += part_w;
+                } else {
+                    if !cur_line.is_empty() {
+                        lines.push(cur_line.clone());
+                        cur_line.clear();
+                        cur_w = 0;
+                    }
+                    if part_w > max_width {
+                        for c in part.chars() {
+                            let combining = is_thai_combining(c);
+                            if !combining && cur_w >= max_width {
+                                lines.push(cur_line.clone());
+                                cur_line.clear();
+                                cur_w = 0;
+                            }
+                            cur_line.push(c);
+                            if !combining {
+                                cur_w += 1;
+                            }
+                        }
+                    } else {
+                        cur_line.push_str(part);
+                        cur_w = part_w;
+                    }
+                }
+            }
+            if !cur_line.is_empty() {
+                lines.push(cur_line);
+            }
+        } else {
+            // ไม่มีช่องว่าง ตัดตามตัวอักษรโดยไม่แยกสระ/วรรณยุกต์ลอย/จม
+            for c in trimmed.chars() {
+                let combining = is_thai_combining(c);
+                if !combining && cur_w >= max_width {
+                    lines.push(cur_line.clone());
+                    cur_line.clear();
+                    cur_w = 0;
+                }
+                cur_line.push(c);
+                if !combining {
+                    cur_w += 1;
+                }
+            }
+            if !cur_line.is_empty() {
+                lines.push(cur_line);
+            }
+        }
+    }
+
+    lines
+}
+
 // ==========================================================
 // EscPosBuilder — ประกอบ Raw Bytes ใบเสร็จ (Pure Rust ไม่มี I/O)
 // ==========================================================
@@ -550,16 +643,25 @@ impl EscPosBuilder {
         self.push_align(0);
     }
 
-    /// หัวบิล — ชื่อร้านขนาดใหญ่กึ่งกลาง
+    /// หัวบิล — ชื่อร้านขนาดใหญ่กึ่งกลาง (ตัดขึ้นบรรทัดใหม่อัตโนมัติหากชื่อยาว)
     pub fn push_store_header(&mut self, name: &str, address: &str, phone: &str) {
-        self.push_emphasis(0x30); // Double size
-        self.push_centered(name);
-        self.push_emphasis(0x00);
+        let max_name_width = (self.width / 2).max(1);
+        let name_lines = wrap_thai_text(name, max_name_width);
+        if !name_lines.is_empty() {
+            self.push_emphasis(0x30); // Double size
+            for line in name_lines {
+                self.push_centered(&line);
+            }
+            self.push_emphasis(0x00);
+        }
+
         if !address.trim().is_empty() {
-            self.push_centered(address);
+            for line in wrap_thai_text(address, self.width) {
+                self.push_centered(&line);
+            }
         }
         if !phone.trim().is_empty() {
-            self.push_centered(format!("โทร. {}", phone).as_str());
+            self.push_centered(format!("โทร. {}", phone.trim()).as_str());
         }
     }
 
@@ -935,6 +1037,82 @@ mod tests {
         }
         // จบด้วยตัดกระดาษ GS V 0
         assert!(bytes.ends_with(&[GS, b'V', 0x00]));
+    }
+
+    #[test]
+    fn test_wrap_thai_text() {
+        // ทดสอบตัดคำภาษาไทยที่ไม่มีช่องว่าง — สระและวรรณยุกต์ต้องไม่ขาดจากพยัญชนะ
+        let text = "ร้านสะดวกซื้อพัฒนาเจริญรุ่งเรือง";
+        let lines = wrap_thai_text(text, 10);
+        assert!(lines.len() >= 2);
+        for line in &lines {
+            assert!(thai_display_width(line) <= 10);
+            // บรรทัดต้องไม่เริ่มต้นด้วยสระบน/ล่าง หรือวรรณยุกต์ลอย
+            let first_char = line.chars().next().unwrap();
+            assert!(!is_thai_combining(first_char));
+        }
+
+        // ทดสอบตัดคำภาษาไทยที่มีช่องว่าง
+        let text_with_space = "ร้านสะดวกซื้อ สาขาหลัก ประจำจังหวัด";
+        let lines_sp = wrap_thai_text(text_with_space, 15);
+        assert!(lines_sp.len() >= 2);
+        for line in &lines_sp {
+            assert!(thai_display_width(line) <= 15);
+        }
+
+        // ทดสอบข้อความที่มี \n อยู่แล้ว
+        let text_newline = "บรรทัดที่หนึ่ง\nบรรทัดที่สอง";
+        let lines_nl = wrap_thai_text(text_newline, 20);
+        assert_eq!(lines_nl.len(), 2);
+        assert_eq!(lines_nl[0], "บรรทัดที่หนึ่ง");
+        assert_eq!(lines_nl[1], "บรรทัดที่สอง");
+    }
+
+    #[test]
+    fn test_long_store_name_raster_sarabun() {
+        #[cfg(target_os = "windows")]
+        {
+            let mut data = sample_data(PaperSize::Mm58);
+            data.receipt_font = "sarabun".to_string();
+
+            // ชื่อร้านสั้น
+            data.store_name = "สั้น".to_string();
+            let b_short = PrintReceiptUseCase::build_receipt_bytes(&data);
+
+            // ชื่อร้านยาวภาษาไทย (ไม่มีช่องว่าง) — ต้องตัดคำขึ้นบรรทัดใหม่อัตโนมัติ ทำให้ความสูงภาพเพิ่มขึ้น
+            data.store_name = "ร้านค้าสะดวกซื้อพัฒนาเจริญรุ่งเรืองสาขาหลักประเทศไทยยาวมาก".to_string();
+            let b_long_thai = PrintReceiptUseCase::build_receipt_bytes(&data);
+            assert!(
+                b_long_thai.len() > b_short.len(),
+                "ชื่อร้านยาวภาษาไทยต้องตัดขึ้นบรรทัดใหม่ ทำให้ความสูง raster มากกว่าชื่อสั้น (long: {}, short: {})",
+                b_long_thai.len(),
+                b_short.len()
+            );
+
+            // ชื่อร้านยาวภาษาอังกฤษ/คำเดียวไม่เว้นวรรค — ต้องไม่ตกขอบกระดาษและตัดบรรทัดได้
+            data.store_name = "SUPERLONGSTORENAMEOFFICIALBRANCHTHAILANDEXTRALARGE".to_string();
+            let b_long_latin = PrintReceiptUseCase::build_receipt_bytes(&data);
+            assert!(
+                b_long_latin.len() > b_short.len(),
+                "ชื่อร้านยาวอักษรละตินต้องตัดขึ้นบรรทัดใหม่ ไม่หลุดตกขอบ (long: {}, short: {})",
+                b_long_latin.len(),
+                b_short.len()
+            );
+        }
+    }
+
+    #[test]
+    fn test_long_store_name_text_mode() {
+        let mut data = sample_data(PaperSize::Mm58);
+        data.receipt_font = "device".to_string();
+        data.store_name = "ร้านค้าสะดวกซื้อพัฒนาเจริญรุ่งเรืองสาขาหลัก".to_string();
+
+        let bytes = PrintReceiptUseCase::build_receipt_bytes(&data);
+        // ในโหมดตัวหนังสือ ต้องตัดขึ้นบรรทัดใหม่ และแต่ละบรรทัดต้องถูกสั่งจัดกึ่งกลาง (ESC a 1)
+        let center_cmd = [0x1B, b'a', 0x01];
+        let center_count = bytes.windows(center_cmd.len()).filter(|w| *w == center_cmd).count();
+        // ต้องมีคำสั่งจัดกึ่งกลางมากกว่า 1 ครั้งเนื่องจากชื่อร้านถูกแยกเป็นหลายบรรทัด
+        assert!(center_count > 1, "ชื่อร้านยาวต้องถูกตัดเป็นหลายบรรทัดและจัดกึ่งกลางทุกบรรทัด");
     }
 
     #[test]

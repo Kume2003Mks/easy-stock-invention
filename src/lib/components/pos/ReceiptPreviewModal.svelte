@@ -320,6 +320,8 @@
     font-size: 13px;
     line-height: 1.7;
     color: #2e3440;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .receipt-paper.font-sarabun {
@@ -344,6 +346,8 @@
   .receipt-store {
     font-size: 17px;
     font-weight: 700;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .receipt-muted {
