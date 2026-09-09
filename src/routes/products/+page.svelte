@@ -70,16 +70,34 @@
   let lowStockAlert = $state(true);
 
   // New product form state
-  let newProduct = $state({
+  let newProduct = $state<{
+    barcode: string;
+    name: string;
+    category_id: string;
+    supplier_id: string;
+    cost_price: number | null;
+    selling_price: number | null;
+    wholesale_price: number | null;
+    current_stock: number | null;
+  }>({
     barcode: "",
     name: "",
     category_id: "",
     supplier_id: "",
-    cost_price: 0,
-    selling_price: 0,
-    wholesale_price: 0,
-    current_stock: 0,
+    cost_price: null,
+    selling_price: null,
+    wholesale_price: null,
+    current_stock: null,
   });
+
+  function handleNumberFocus(e: FocusEvent) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (target) {
+      requestAnimationFrame(() => {
+        target.select();
+      });
+    }
+  }
 
   // Validation error state
   let formErrors = $state<Record<string, string>>({});
@@ -103,16 +121,16 @@
     if (!newProduct.category_id) {
       errors.category_id = "กรุณาเลือกหมวดหมู่";
     }
-    if (newProduct.cost_price < 0) {
+    if (newProduct.cost_price !== null && newProduct.cost_price !== undefined && Number(newProduct.cost_price) < 0) {
       errors.cost_price = "ราคาต้นทุนต้องไม่ติดลบ";
     }
-    if (newProduct.selling_price < 0) {
+    if (newProduct.selling_price !== null && newProduct.selling_price !== undefined && Number(newProduct.selling_price) < 0) {
       errors.selling_price = "ราคาขายต้องไม่ติดลบ";
     }
-    if (newProduct.wholesale_price < 0) {
+    if (newProduct.wholesale_price !== null && newProduct.wholesale_price !== undefined && Number(newProduct.wholesale_price) < 0) {
       errors.wholesale_price = "ราคาขายส่งต้องไม่ติดลบ";
     }
-    if (newProduct.current_stock < 0) {
+    if (newProduct.current_stock !== null && newProduct.current_stock !== undefined && Number(newProduct.current_stock) < 0) {
       errors.current_stock = "จำนวนสต็อกเริ่มต้นต้องไม่ติดลบ";
     }
 
@@ -208,10 +226,10 @@
       name: "",
       category_id: "",
       supplier_id: "",
-      cost_price: 0,
-      selling_price: 0,
-      wholesale_price: 0,
-      current_stock: 0,
+      cost_price: null,
+      selling_price: null,
+      wholesale_price: null,
+      current_stock: null,
     };
     formErrors = {};
     showAddModal = true;
@@ -276,16 +294,26 @@
   // Edit product modal state
   let showEditModal = $state(false);
   let showEditConfirm = $state(false);
-  let editProduct = $state({
+  let editProduct = $state<{
+    product_id: string;
+    barcode: string;
+    name: string;
+    category_id: string;
+    supplier_id: string;
+    cost_price: number | null;
+    selling_price: number | null;
+    wholesale_price: number | null;
+    current_stock: number | null;
+  }>({
     product_id: "",
     barcode: "",
     name: "",
     category_id: "",
     supplier_id: "",
-    cost_price: 0,
-    selling_price: 0,
-    wholesale_price: 0,
-    current_stock: 0,
+    cost_price: null,
+    selling_price: null,
+    wholesale_price: null,
+    current_stock: null,
   });
   let editFormErrors = $state<Record<string, string>>({});
 
@@ -307,13 +335,13 @@
     if (!editProduct.category_id) {
       errors.category_id = "กรุณาเลือกหมวดหมู่";
     }
-    if (editProduct.cost_price < 0) {
+    if (editProduct.cost_price !== null && editProduct.cost_price !== undefined && Number(editProduct.cost_price) < 0) {
       errors.cost_price = "ราคาต้นทุนต้องไม่ติดลบ";
     }
-    if (editProduct.selling_price < 0) {
+    if (editProduct.selling_price !== null && editProduct.selling_price !== undefined && Number(editProduct.selling_price) < 0) {
       errors.selling_price = "ราคาขายต้องไม่ติดลบ";
     }
-    if (editProduct.wholesale_price < 0) {
+    if (editProduct.wholesale_price !== null && editProduct.wholesale_price !== undefined && Number(editProduct.wholesale_price) < 0) {
       errors.wholesale_price = "ราคาขายส่งต้องไม่ติดลบ";
     }
     editFormErrors = errors;
@@ -777,9 +805,10 @@
           placeholder="0.00"
           bind:value={newProduct.cost_price}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearFieldError("cost_price")}
+          onfocus={handleNumberFocus}
         />
         {#if formErrors.cost_price}
           <span class="error-text">{formErrors.cost_price}</span>
@@ -800,9 +829,10 @@
           placeholder="0.00"
           bind:value={newProduct.selling_price}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearFieldError("selling_price")}
+          onfocus={handleNumberFocus}
         />
         {#if formErrors.selling_price}
           <span class="error-text">{formErrors.selling_price}</span>
@@ -823,9 +853,10 @@
           placeholder="0.00"
           bind:value={newProduct.wholesale_price}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearFieldError("wholesale_price")}
+          onfocus={handleNumberFocus}
         />
         {#if formErrors.wholesale_price}
           <span class="error-text">{formErrors.wholesale_price}</span>
@@ -844,9 +875,10 @@
           placeholder="0"
           bind:value={newProduct.current_stock}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearFieldError("current_stock")}
+          onfocus={handleNumberFocus}
         />
         {#if formErrors.current_stock}
           <span class="error-text">{formErrors.current_stock}</span>
@@ -1063,9 +1095,10 @@
           placeholder="0.00"
           bind:value={editProduct.cost_price}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearEditFieldError("cost_price")}
+          onfocus={handleNumberFocus}
         />
         {#if editFormErrors.cost_price}
           <span class="error-text">{editFormErrors.cost_price}</span>
@@ -1086,9 +1119,10 @@
           placeholder="0.00"
           bind:value={editProduct.selling_price}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearEditFieldError("selling_price")}
+          onfocus={handleNumberFocus}
         />
         {#if editFormErrors.selling_price}
           <span class="error-text">{editFormErrors.selling_price}</span>
@@ -1109,9 +1143,10 @@
           placeholder="0.00"
           bind:value={editProduct.wholesale_price}
           onkeydown={(e) => {
-            if (e.key === "-" || e.key === "e") e.preventDefault();
+            if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
           }}
           oninput={() => clearEditFieldError("wholesale_price")}
+          onfocus={handleNumberFocus}
         />
         {#if editFormErrors.wholesale_price}
           <span class="error-text">{editFormErrors.wholesale_price}</span>
@@ -1279,6 +1314,7 @@
               class:input-error={!!adjustError}
               bind:value={adjustQuantity}
               oninput={() => (adjustError = "")}
+              onfocus={handleNumberFocus}
             />
             <button
               type="button"
