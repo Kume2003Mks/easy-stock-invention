@@ -22,6 +22,7 @@
     store_name: "Easy Stock",
     store_address: "",
     store_phone: "",
+    receipt_footer: "ขอบคุณที่ใช้บริการ",
   });
   let receiptFont = $state("sarabun");
   let printing = $state(false);
@@ -205,8 +206,19 @@
             <span>หมายเหตุ</span><span>{order.note}</span>
           </div>
         {/if}
-        <div class="receipt-sep"></div>
-        <div class="receipt-center receipt-muted">ขอบคุณที่ใช้บริการ</div>
+        {#if store.receipt_footer !== undefined}
+          {#if store.receipt_footer.trim()}
+            <div class="receipt-sep"></div>
+            {#each store.receipt_footer.split("\n") as line}
+              {#if line.trim()}
+                <div class="receipt-center receipt-muted">{line.trim()}</div>
+              {/if}
+            {/each}
+          {/if}
+        {:else}
+          <div class="receipt-sep"></div>
+          <div class="receipt-center receipt-muted">ขอบคุณที่ใช้บริการ</div>
+        {/if}
       </div>
 
       <!-- Action Buttons -->

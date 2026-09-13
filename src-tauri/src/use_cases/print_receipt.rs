@@ -227,10 +227,6 @@ pub mod gdi_raster {
         y += draw_dashed_line(hdc, left, right, y + 4, is_draw);
 
         // สรุปยอด
-        let h_sub = draw_text_line(hdc, "รวมย่อย", fonts.body, left, y, right, DT_LEFT, is_draw);
-        draw_text_line(hdc, &format!("{:.2}", data.subtotal), fonts.body, left, y, right, DT_RIGHT, is_draw);
-        y += h_sub + 6;
-
         if data.discount_amount > 0.0 {
             let h_disc = draw_text_line(hdc, "ส่วนลด", fonts.body, left, y, right, DT_LEFT, is_draw);
             draw_text_line(hdc, &format!("-{:.2}", data.discount_amount), fonts.body, left, y, right, DT_RIGHT, is_draw);
@@ -313,9 +309,15 @@ pub mod gdi_raster {
         }
 
         // ท้ายบิล
-        y += draw_dashed_line(hdc, left, right, y + 4, is_draw);
-        let h_end = draw_text_line(hdc, "ขอบคุณที่ใช้บริการ", fonts.body, left, y, right, DT_CENTER, is_draw);
-        y += h_end + 18;
+        let footer = data.receipt_footer.trim();
+        if !footer.is_empty() {
+            y += draw_dashed_line(hdc, left, right, y + 4, is_draw);
+            let normalized_footer = footer.replace("\r\n", "\n").replace('\n', "\r\n");
+            let h_end = draw_text_line(hdc, &normalized_footer, fonts.body, left, y, right, DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL, is_draw);
+            y += h_end + 18;
+        } else {
+            y += 18;
+        }
 
         y // คืนค่าความสูงทั้งหมดของใบเสร็จ (pixels)
     }
@@ -744,6 +746,23 @@ impl EscPosBuilder {
         self.raw(&[GS, b'V', 0x00]); // Full cut
     }
 
+    /// ข้อความท้ายใบเสร็จ (จัดกึ่งกลางและตัดขึ้นบรรทัดใหม่อัตโนมัติหากยาว)
+    pub fn push_footer(&mut self, footer: &str) {
+        let trimmed = footer.trim();
+        if !trimmed.is_empty() {
+            self.push_separator();
+            for raw_line in trimmed.lines() {
+                let l = raw_line.trim();
+                if l.is_empty() {
+                    continue;
+                }
+                for wrapped in wrap_thai_text(l, self.width) {
+                    self.push_centered(&wrapped);
+                }
+            }
+        }
+    }
+
     pub fn build(self) -> Vec<u8> {
         self.bytes
     }
@@ -959,7 +978,6 @@ impl PrintReceiptUseCase {
         b.push_separator();
 
         // สรุปยอด
-        b.push_kv("รวมย่อย", &format!("{:.2}", data.subtotal));
         if data.discount_amount > 0.0 {
             b.push_kv("ส่วนลด", &format!("-{:.2}", data.discount_amount));
         }
@@ -997,8 +1015,7 @@ impl PrintReceiptUseCase {
         }
 
         // ท้ายบิล + ตัดกระดาษ
-        b.push_separator();
-        b.push_centered("ขอบคุณที่ใช้บริการ");
+        b.push_footer(&data.receipt_footer);
         b.push_cash_drawer();
         b.push_cut();
 
@@ -1050,6 +1067,7 @@ mod tests {
             paper_size: paper,
             codepage: 26,
             receipt_font: "device".to_string(),
+            receipt_footer: "ขอบคุณที่ใช้บริการ".to_string(),
         }
     }
 
@@ -1297,5 +1315,23 @@ mod tests {
         assert!(svg.starts_with("<svg"));
         assert!(svg.ends_with("</svg>"));
         assert!(svg.contains("<rect"));
+    }
+
+    #[test]
+    fn test_custom_receipt_footer() {
+        let mut data = sample_data(PaperSize::Mm80);
+        data.receipt_footer = "สินค้าซื้อแล้วไม่รับเปลี่ยนคืน\nขอบคุณมากครับ".to_string();
+
+        let bytes = PrintReceiptUseCase::build_receipt_bytes_text(&data);
+        let part1 = tis620::encode("สินค้าซื้อแล้วไม่รับเปลี่ยนคืน");
+        let part2 = tis620::encode("ขอบคุณมากครับ");
+        assert!(bytes.windows(part1.len()).any(|w| w == part1.as_slice()));
+        assert!(bytes.windows(part2.len()).any(|w| w == part2.as_slice()));
+
+        // ทดสอบเมื่อข้อความท้ายบิลว่างเปล่า จะต้องไม่มี marker ขอบคุณที่ใช้บริการ
+        data.receipt_footer = "".to_string();
+        let bytes_empty = PrintReceiptUseCase::build_receipt_bytes_text(&data);
+        let default_marker = tis620::encode("ขอบคุณที่ใช้บริการ");
+        assert!(!bytes_empty.windows(default_marker.len()).any(|w| w == default_marker.as_slice()));
     }
 }

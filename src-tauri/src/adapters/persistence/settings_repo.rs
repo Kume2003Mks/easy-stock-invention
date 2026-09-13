@@ -25,6 +25,7 @@ pub const DEFAULT_SETTINGS: &[(&str, &str, &str)] = &[
     ("promptpay_amount_enabled", "true", "กำหนดให้ระบุยอดเงินใน QR Code พร้อมเพย์ตามยอดบิล (true=ระบุยอด, false=ไม่ระบุยอด ให้ลูกค้ากรอกเอง)"),
     ("printer_codepage", "26", "ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"),
     ("receipt_font", "sarabun", "รูปแบบฟอนต์ใบเสร็จ (sarabun=กราฟิกบิตแมปความคมชัดสูง, device=ฟอนต์เครื่องพิมพ์)"),
+    ("receipt_footer", "ขอบคุณที่ใช้บริการ", "ข้อความท้ายใบเสร็จ"),
 ];
 
 /// Insert default settings if they do not exist yet.

@@ -64,6 +64,7 @@
   let promptpayAmountEnabled = $state(true);
   let printerCodepage = $state("26");
   let receiptFont = $state("sarabun");
+  let receiptFooter = $state("ขอบคุณที่ใช้บริการ");
   let testingPrint = $state(false);
   let saving = $state(false);
 
@@ -243,6 +244,7 @@
     promptpayAmountEnabled: boolean;
     printerCodepage: string;
     receiptFont: string;
+    receiptFooter: string;
   };
 
   let savedSnapshot = $state<SavedSnapshot | null>(null);
@@ -271,6 +273,7 @@
       promptpayAmountEnabled,
       printerCodepage,
       receiptFont,
+      receiptFooter,
     };
   }
 
@@ -298,7 +301,8 @@
         promptpayQrEnabled !== savedSnapshot.promptpayQrEnabled ||
         promptpayAmountEnabled !== savedSnapshot.promptpayAmountEnabled ||
         printerCodepage !== savedSnapshot.printerCodepage ||
-        receiptFont !== savedSnapshot.receiptFont
+        receiptFont !== savedSnapshot.receiptFont ||
+        receiptFooter !== savedSnapshot.receiptFooter
       );
     }
     if (cat === "stock") {
@@ -336,6 +340,7 @@
       promptpayAmountEnabled = savedSnapshot.promptpayAmountEnabled;
       printerCodepage = savedSnapshot.printerCodepage;
       receiptFont = savedSnapshot.receiptFont;
+      receiptFooter = savedSnapshot.receiptFooter;
       syncUsbSelection();
     } else if (cat === "stock") {
       allowOutOfStockSale = savedSnapshot.allowOutOfStockSale;
@@ -467,6 +472,10 @@
           : true;
       printerCodepage = result.printer_codepage || "26";
       receiptFont = result.receipt_font || "sarabun";
+      receiptFooter =
+        result.receipt_footer !== undefined
+          ? result.receipt_footer
+          : "ขอบคุณที่ใช้บริการ";
 
       syncUsbSelection();
       savedSnapshot = takeSnapshot();
@@ -524,6 +533,7 @@
           promptpay_amount_enabled: String(promptpayAmountEnabled),
           printer_codepage: printerCodepage,
           receipt_font: receiptFont,
+          receipt_footer: receiptFooter,
         },
       });
 
@@ -599,6 +609,7 @@
           store_name: storeName,
           store_address: storeAddress,
           store_phone: storePhone,
+          receipt_footer: receiptFooter,
           printer_codepage: printerCodepage,
           receipt_font: receiptFont,
         },
@@ -789,7 +800,7 @@
               <span class="category-title">เครื่องพิมพ์ใบเสร็จ</span>
               <span class="category-desc"
                 >การเชื่อมต่อ USB/เครือข่าย, ขนาดกระดาษ, ฟอนต์ Sarabun,
-                รหัสภาษาไทย, พร้อมเพย์ QR</span
+                รหัสภาษาไทย, พร้อมเพย์ QR, ข้อความท้ายใบเสร็จ</span
               >
             </div>
             {#if isCategoryDirty("printer")}
@@ -1410,6 +1421,38 @@
                     </div>
                   {/if}
                 {/if}
+              </div>
+            </div>
+
+            <!-- Receipt Footer Card -->
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>ข้อความท้ายใบเสร็จ</h3>
+                  <p>
+                    กำหนดข้อความขอบคุณ หรือเงื่อนไขท้ายใบเสร็จรับเงิน (เช่น สินค้าซื้อแล้วไม่รับเปลี่ยนคืน)
+                  </p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <label for="receipt-footer">ข้อความท้ายใบเสร็จ</label>
+                    <span class="fluent-row-desc"
+                      >ข้อความที่พิมพ์อยู่ส่วนล่างสุดของใบเสร็จ (รองรับการขึ้นบรรทัดใหม่)</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <textarea
+                      id="receipt-footer"
+                      class="input-field input-modern"
+                      bind:value={receiptFooter}
+                      placeholder="เช่น ขอบคุณที่ใช้บริการ&#10;สินค้าซื้อแล้วไม่รับเปลี่ยนหรือคืน"
+                      rows="3"
+                    ></textarea>
+                  </div>
+                </div>
               </div>
             </div>
 

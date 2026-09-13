@@ -79,6 +79,9 @@ pub struct ReceiptData {
     /// รูปแบบฟอนต์ใบเสร็จ ("sarabun" หรือ "device")
     #[serde(default = "default_receipt_font")]
     pub receipt_font: String,
+    /// ข้อความท้ายใบเสร็จ (ค่าเริ่มต้น: "ขอบคุณที่ใช้บริการ")
+    #[serde(default = "default_receipt_footer")]
+    pub receipt_footer: String,
 }
 
 fn default_true() -> bool {
@@ -91,6 +94,10 @@ fn default_codepage() -> u8 {
 
 fn default_receipt_font() -> String {
     "sarabun".to_string()
+}
+
+fn default_receipt_footer() -> String {
+    "ขอบคุณที่ใช้บริการ".to_string()
 }
 
 /// Trait พอร์ตเครื่องพิมพ์ — Implementation อยู่ที่ Infrastructure Layer

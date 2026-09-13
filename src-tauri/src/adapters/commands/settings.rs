@@ -39,6 +39,8 @@ pub struct SettingsPayload {
     pub printer_codepage: String,
     #[serde(default = "default_receipt_font")]
     pub receipt_font: String,
+    #[serde(default = "default_receipt_footer")]
+    pub receipt_footer: String,
 }
 
 fn default_true_str() -> String {
@@ -51,6 +53,10 @@ fn default_print_behavior() -> String {
 
 fn default_receipt_font() -> String {
     "sarabun".to_string()
+}
+
+fn default_receipt_footer() -> String {
+    "ขอบคุณที่ใช้บริการ".to_string()
 }
 
 fn default_codepage_str() -> String {
@@ -80,6 +86,7 @@ impl Default for SettingsPayload {
             promptpay_amount_enabled: "true".to_string(),
             printer_codepage: "26".to_string(),
             receipt_font: "sarabun".to_string(),
+            receipt_footer: "ขอบคุณที่ใช้บริการ".to_string(),
         }
     }
 }
@@ -165,6 +172,9 @@ pub fn get_settings(state: State<'_, Mutex<Connection>>) -> Result<SettingsPaylo
     if let Some(v) = settings_repo::get_setting(&conn, "receipt_font")? {
         payload.receipt_font = v;
     }
+    if let Some(v) = settings_repo::get_setting(&conn, "receipt_footer")? {
+        payload.receipt_footer = v;
+    }
 
     Ok(payload)
 }
@@ -221,6 +231,7 @@ pub fn save_settings(
     settings_repo::upsert_setting(&conn, "promptpay_amount_enabled", &payload.promptpay_amount_enabled, Some("กำหนดให้ระบุยอดเงินใน QR Code พร้อมเพย์ตามยอดบิล (true=ระบุยอด, false=ไม่ระบุยอด ให้ลูกค้ากรอกเอง)"))?;
     settings_repo::upsert_setting(&conn, "printer_codepage", &payload.printer_codepage, Some("ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"))?;
     settings_repo::upsert_setting(&conn, "receipt_font", &payload.receipt_font, Some("รูปแบบฟอนต์ใบเสร็จ (sarabun=กราฟิกบิตแมปความคมชัดสูง, device=ฟอนต์เครื่องพิมพ์)"))?;
+    settings_repo::upsert_setting(&conn, "receipt_footer", &payload.receipt_footer, Some("ข้อความท้ายใบเสร็จ"))?;
 
     Ok(())
 }

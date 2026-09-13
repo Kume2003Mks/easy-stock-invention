@@ -29,6 +29,7 @@ struct ReceiptSettings {
     promptpay_amount_enabled: bool,
     printer_codepage: u8,
     receipt_font: String,
+    receipt_footer: String,
 }
 
 impl Default for ReceiptSettings {
@@ -46,6 +47,7 @@ impl Default for ReceiptSettings {
             promptpay_amount_enabled: true,
             printer_codepage: 26,
             receipt_font: "sarabun".to_string(),
+            receipt_footer: "ขอบคุณที่ใช้บริการ".to_string(),
         }
     }
 }
@@ -99,6 +101,9 @@ fn load_receipt_settings(conn: &Connection) -> ReceiptSettings {
     if let Some(v) = get("receipt_font") {
         s.receipt_font = v;
     }
+    if let Some(v) = get("receipt_footer") {
+        s.receipt_footer = v;
+    }
     s
 }
 
@@ -132,6 +137,7 @@ fn build_receipt_data(order: &Order, s: &ReceiptSettings) -> ReceiptData {
         paper_size: s.paper_size,
         codepage: s.printer_codepage,
         receipt_font: s.receipt_font.clone(),
+        receipt_footer: s.receipt_footer.clone(),
     }
 }
 
@@ -380,6 +386,7 @@ pub struct TestPrintPayload {
     pub store_name: Option<String>,
     pub store_address: Option<String>,
     pub store_phone: Option<String>,
+    pub receipt_footer: Option<String>,
     pub printer_codepage: Option<String>,
     pub receipt_font: Option<String>,
 }
@@ -425,6 +432,9 @@ pub fn print_test_receipt(
         if let Some(ph) = p.store_phone {
             settings.store_phone = ph;
         }
+        if let Some(rf) = p.receipt_footer {
+            settings.receipt_footer = rf;
+        }
         if let Some(cp) = p.printer_codepage {
             settings.printer_codepage = cp.parse::<u8>().unwrap_or(26);
         }
@@ -469,6 +479,7 @@ pub fn print_test_receipt(
         paper_size: settings.paper_size,
         codepage: settings.printer_codepage,
         receipt_font: settings.receipt_font.clone(),
+        receipt_footer: settings.receipt_footer.clone(),
     };
 
     PrintReceiptUseCase::execute(port.as_ref(), &data).map_err(AppError::Printer)

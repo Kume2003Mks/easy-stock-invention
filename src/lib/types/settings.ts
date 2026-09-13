@@ -22,6 +22,7 @@ export interface AppSettings {
   promptpay_amount_enabled?: string;
   printer_codepage?: string;
   receipt_font?: string;
+  receipt_footer?: string;
 }
 
 /**
@@ -41,6 +42,7 @@ export interface StoreSettings {
   store_name: string;
   store_address: string;
   store_phone: string;
+  receipt_footer?: string;
 }
 
 /**
