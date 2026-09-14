@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { getVersion } from "@tauri-apps/api/app";
   import { onMount } from "svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import Dropdown from "$lib/components/Dropdown.svelte";
@@ -18,6 +19,9 @@
 
   // Navigation state: null = Category Hub (main list), string = Subpage view
   let activeCategory = $state<SettingCategory | null>(null);
+
+  // App version state
+  let appVersion = $state("0.1.0");
 
   // Store settings state
   let storeName = $state("Easy Stock");
@@ -209,10 +213,15 @@
     if (promptpayQrEnabled) {
       const cleanId = promptpayId.replace(/[-\s]/g, "");
       if (!cleanId) {
-        errors.promptpay_id = "กรุณากรอกหมายเลข PromptPay (จำเป็นเมื่อเปิดใช้งานพร้อมเพย์)";
+        errors.promptpay_id =
+          "กรุณากรอกหมายเลข PromptPay (จำเป็นเมื่อเปิดใช้งานพร้อมเพย์)";
       } else if (!/^\d+$/.test(cleanId)) {
         errors.promptpay_id = "หมายเลข PromptPay ต้องเป็นตัวเลขเท่านั้น";
-      } else if (cleanId.length !== 10 && cleanId.length !== 13 && cleanId.length !== 15) {
+      } else if (
+        cleanId.length !== 10 &&
+        cleanId.length !== 13 &&
+        cleanId.length !== 15
+      ) {
         errors.promptpay_id = `หมายเลข PromptPay ต้องเป็นเบอร์โทร 10 หลัก หรือเลขบัตรประชาชน 13 หลัก (ปัจจุบันมี ${cleanId.length} หลัก)`;
       }
     }
@@ -421,6 +430,12 @@
   }
 
   onMount(async () => {
+    try {
+      appVersion = await getVersion();
+    } catch (e) {
+      console.warn("Failed to get app version from Tauri:", e);
+    }
+
     try {
       loadSystemPrinters();
 
@@ -716,6 +731,10 @@
             {#if allowOutOfStockSale}
               <span class="badge badge-accent">อนุญาตขายสินค้าหมด</span>
             {/if}
+            <span class="badge badge-version">
+              <span class="badge-dot-version"></span>
+              v{appVersion}
+            </span>
           </div>
         </div>
       </div>
@@ -926,6 +945,10 @@
               </svg>
             </div>
           </button>
+        </div>
+
+        <div class="hub-system-footer">
+          <span>Easy Stock POS • v{appVersion}</span>
         </div>
       </div>
 
@@ -1430,7 +1453,8 @@
                 <div class="section-card-title-group">
                   <h3>ข้อความท้ายใบเสร็จ</h3>
                   <p>
-                    กำหนดข้อความขอบคุณ หรือเงื่อนไขท้ายใบเสร็จรับเงิน (เช่น สินค้าซื้อแล้วไม่รับเปลี่ยนคืน)
+                    กำหนดข้อความขอบคุณ หรือเงื่อนไขท้ายใบเสร็จรับเงิน (เช่น
+                    สินค้าซื้อแล้วไม่รับเปลี่ยนคืน)
                   </p>
                 </div>
               </div>
@@ -1440,7 +1464,8 @@
                   <div class="fluent-row-info">
                     <label for="receipt-footer">ข้อความท้ายใบเสร็จ</label>
                     <span class="fluent-row-desc"
-                      >ข้อความที่พิมพ์อยู่ส่วนล่างสุดของใบเสร็จ (รองรับการขึ้นบรรทัดใหม่)</span
+                      >ข้อความที่พิมพ์อยู่ส่วนล่างสุดของใบเสร็จ
+                      (รองรับการขึ้นบรรทัดใหม่)</span
                     >
                   </div>
                   <div class="fluent-row-control">
@@ -1498,7 +1523,10 @@
                   {#if promptpayQrEnabled}
                     <div class="fluent-row">
                       <div class="fluent-row-info">
-                        <label for="promptpay-id" class:label-error={!!formErrors.promptpay_id}>
+                        <label
+                          for="promptpay-id"
+                          class:label-error={!!formErrors.promptpay_id}
+                        >
                           หมายเลข PromptPay <span class="required-star">*</span>
                         </label>
                         <span class="fluent-row-desc"
@@ -1517,7 +1545,9 @@
                           required
                         />
                         {#if formErrors.promptpay_id}
-                          <span class="error-text">{formErrors.promptpay_id}</span>
+                          <span class="error-text"
+                            >{formErrors.promptpay_id}</span
+                          >
                         {/if}
                       </div>
                     </div>
@@ -1752,6 +1782,32 @@
                         ตามการตั้งค่านี้
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- App & System Information Card -->
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>ข้อมูลระบบและเวอร์ชัน</h3>
+                  <p>รายละเอียดเวอร์ชันของโปรแกรมและสถาปัตยกรรมระบบ</p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="fluent-row">
+                  <div class="fluent-row-info">
+                    <span class="fluent-row-title"
+                      >เวอร์ชันของโปรแกรม (App Version)</span
+                    >
+                  </div>
+                  <div class="fluent-row-control">
+                    <span class="version-tag">
+                      <span class="version-badge-pulse"></span>
+                      v{appVersion}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -2753,5 +2809,70 @@
     margin: 0;
     font-size: 12px;
     color: var(--color-muted);
+  }
+
+  /* VERSION & ABOUT STYLING */
+  .badge-version {
+    background-color: rgba(94, 129, 172, 0.15);
+    color: var(--color-primary);
+    font-family: monospace;
+    font-weight: 600;
+  }
+
+  .badge-dot-version {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-primary);
+  }
+
+  .hub-system-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px 0 8px 0;
+    font-size: 13px;
+    color: var(--color-muted);
+    font-family: monospace;
+    letter-spacing: 0.3px;
+  }
+
+  .version-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background-color: rgba(94, 129, 172, 0.1);
+    color: var(--color-primary);
+    border: 1px solid rgba(94, 129, 172, 0.25);
+    border-radius: 20px;
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .version-badge-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-accent-success);
+    box-shadow: 0 0 0 0 rgba(163, 190, 140, 0.7);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(163, 190, 140, 0.7);
+    }
+    70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 6px rgba(163, 190, 140, 0);
+    }
+    100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(163, 190, 140, 0);
+    }
   }
 </style>
