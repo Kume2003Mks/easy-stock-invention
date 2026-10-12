@@ -179,7 +179,13 @@
         <div class="receipt-sep"></div>
 
         <div class="receipt-row">
-          <span>รวมย่อย</span><span>{formatMoney(order.subtotal)}</span>
+          <span>จำนวนสินค้าทั้งหมด</span>
+          <span
+            >{(order.items ?? []).reduce(
+              (sum, i) => sum + i.quantity,
+              0,
+            )} ชิ้น</span
+          >
         </div>
         {#if order.discount_amount > 0}
           <div class="receipt-row">

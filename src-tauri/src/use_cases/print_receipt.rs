@@ -227,6 +227,11 @@ pub mod gdi_raster {
         y += draw_dashed_line(hdc, left, right, y + 4, is_draw);
 
         // สรุปยอด
+        let total_items: i32 = data.items.iter().map(|i| i.quantity).sum();
+        let h_items = draw_text_line(hdc, "จำนวนสินค้าทั้งหมด", fonts.body, left, y, right, DT_LEFT, is_draw);
+        draw_text_line(hdc, &format!("{} ชิ้น", total_items), fonts.body, left, y, right, DT_RIGHT, is_draw);
+        y += h_items + 6;
+
         if data.discount_amount > 0.0 {
             let h_disc = draw_text_line(hdc, "ส่วนลด", fonts.body, left, y, right, DT_LEFT, is_draw);
             draw_text_line(hdc, &format!("-{:.2}", data.discount_amount), fonts.body, left, y, right, DT_RIGHT, is_draw);
@@ -978,6 +983,9 @@ impl PrintReceiptUseCase {
         b.push_separator();
 
         // สรุปยอด
+        let total_items: i32 = data.items.iter().map(|i| i.quantity).sum();
+        b.push_kv("จำนวนสินค้าทั้งหมด", &format!("{} ชิ้น", total_items));
+
         if data.discount_amount > 0.0 {
             b.push_kv("ส่วนลด", &format!("-{:.2}", data.discount_amount));
         }
