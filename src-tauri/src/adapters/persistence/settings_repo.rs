@@ -26,6 +26,7 @@ pub const DEFAULT_SETTINGS: &[(&str, &str, &str)] = &[
     ("printer_codepage", "26", "ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"),
     ("receipt_font", "sarabun", "รูปแบบฟอนต์ใบเสร็จ (sarabun=กราฟิกบิตแมปความคมชัดสูง, device=ฟอนต์เครื่องพิมพ์)"),
     ("receipt_footer", "ขอบคุณที่ใช้บริการ", "ข้อความท้ายใบเสร็จ"),
+    ("pos_layout", "products_first", "รูปแบบการจัดวางหน้า POS (products_first=สินค้าหลัก/ตะกร้ารอง, cart_first=ตะกร้าหลัก/สินค้ารอง)"),
 ];
 
 /// Insert default settings if they do not exist yet.

@@ -41,6 +41,12 @@ pub struct SettingsPayload {
     pub receipt_font: String,
     #[serde(default = "default_receipt_footer")]
     pub receipt_footer: String,
+    #[serde(default = "default_pos_layout")]
+    pub pos_layout: String,
+}
+
+fn default_pos_layout() -> String {
+    "products_first".to_string()
 }
 
 fn default_true_str() -> String {
@@ -87,6 +93,7 @@ impl Default for SettingsPayload {
             printer_codepage: "26".to_string(),
             receipt_font: "sarabun".to_string(),
             receipt_footer: "ขอบคุณที่ใช้บริการ".to_string(),
+            pos_layout: "products_first".to_string(),
         }
     }
 }
@@ -175,6 +182,9 @@ pub fn get_settings(state: State<'_, Mutex<Connection>>) -> Result<SettingsPaylo
     if let Some(v) = settings_repo::get_setting(&conn, "receipt_footer")? {
         payload.receipt_footer = v;
     }
+    if let Some(v) = settings_repo::get_setting(&conn, "pos_layout")? {
+        payload.pos_layout = v;
+    }
 
     Ok(payload)
 }
@@ -232,6 +242,12 @@ pub fn save_settings(
     settings_repo::upsert_setting(&conn, "printer_codepage", &payload.printer_codepage, Some("ชุดรหัสภาษาไทยสำหรับเครื่องพิมพ์ ESC/POS (26=TIS18, 21=TIS11, 255=CP874, 20=KU42)"))?;
     settings_repo::upsert_setting(&conn, "receipt_font", &payload.receipt_font, Some("รูปแบบฟอนต์ใบเสร็จ (sarabun=กราฟิกบิตแมปความคมชัดสูง, device=ฟอนต์เครื่องพิมพ์)"))?;
     settings_repo::upsert_setting(&conn, "receipt_footer", &payload.receipt_footer, Some("ข้อความท้ายใบเสร็จ"))?;
+    let pos_layout_val = if payload.pos_layout == "cart_first" {
+        "cart_first"
+    } else {
+        "products_first"
+    };
+    settings_repo::upsert_setting(&conn, "pos_layout", pos_layout_val, Some("รูปแบบการจัดวางหน้า POS (products_first=สินค้าหลัก/ตะกร้ารอง, cart_first=ตะกร้าหลัก/สินค้ารอง)"))?;
 
     Ok(())
 }
@@ -329,6 +345,24 @@ mod tests {
         };
         let clean_valid = payload_valid.promptpay_id.replace(&['-', ' '][..], "");
         assert!(!clean_valid.trim().is_empty());
+    }
+
+    #[test]
+    fn test_pos_layout_default_and_saving() {
+        let conn = setup_test_db();
+        settings_repo::ensure_default_settings(&conn).expect("defaults");
+
+        let val = settings_repo::get_setting(&conn, "pos_layout")
+            .expect("query")
+            .expect("some");
+        assert_eq!(val, "products_first");
+
+        // Test saving cart_first
+        settings_repo::upsert_setting(&conn, "pos_layout", "cart_first", None).expect("upsert");
+        let updated = settings_repo::get_setting(&conn, "pos_layout")
+            .expect("query")
+            .expect("some");
+        assert_eq!(updated, "cart_first");
     }
 }
 

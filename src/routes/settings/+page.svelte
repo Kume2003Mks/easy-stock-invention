@@ -12,7 +12,7 @@
     getCurrencySymbol,
     getCurrencyName,
   } from "$lib/utils/currency";
-  import { updateSystemCurrency } from "$lib/stores/settings";
+  import { updateSystemCurrency, updatePosLayout, type PosLayoutMode } from "$lib/stores/settings";
   import type { AppSettings, SystemPrintersResponse } from "$lib/types";
 
   type SettingCategory = "store" | "printer" | "stock" | "system";
@@ -37,6 +37,9 @@
   }));
   let currentCurrencySymbol = $derived(getCurrencySymbol(currency));
   let currentCurrencyName = $derived(getCurrencyName(currency));
+
+  // POS Layout settings
+  let posLayout = $state<PosLayoutMode>("products_first");
 
   // Stock & Sales settings
   let allowOutOfStockSale = $state(false);
@@ -254,6 +257,7 @@
     printerCodepage: string;
     receiptFont: string;
     receiptFooter: string;
+    posLayout: PosLayoutMode;
   };
 
   let savedSnapshot = $state<SavedSnapshot | null>(null);
@@ -283,6 +287,7 @@
       printerCodepage,
       receiptFont,
       receiptFooter,
+      posLayout,
     };
   }
 
@@ -322,7 +327,10 @@
       );
     }
     if (cat === "system") {
-      return currency !== savedSnapshot.currency;
+      return (
+        currency !== savedSnapshot.currency ||
+        posLayout !== savedSnapshot.posLayout
+      );
     }
     return false;
   }
@@ -357,6 +365,7 @@
       lowStockThreshold = savedSnapshot.lowStockThreshold;
     } else if (cat === "system") {
       currency = savedSnapshot.currency;
+      posLayout = savedSnapshot.posLayout;
     }
   }
 
@@ -491,10 +500,14 @@
         result.receipt_footer !== undefined
           ? result.receipt_footer
           : "ขอบคุณที่ใช้บริการ";
+      posLayout = (result.pos_layout === "cart_first"
+        ? "cart_first"
+        : "products_first") as PosLayoutMode;
 
       syncUsbSelection();
       savedSnapshot = takeSnapshot();
       updateSystemCurrency(currency);
+      updatePosLayout(posLayout);
     } catch (e) {
       loadError = String(e);
     } finally {
@@ -549,6 +562,7 @@
           printer_codepage: printerCodepage,
           receipt_font: receiptFont,
           receipt_footer: receiptFooter,
+          pos_layout: posLayout,
         },
       });
 
@@ -556,6 +570,7 @@
 
       if (cat === "system") {
         updateSystemCurrency(currency);
+        updatePosLayout(posLayout);
       }
 
       const messages: Record<SettingCategory, string> = {
@@ -727,6 +742,9 @@
             </span>
             <span class="badge badge-secondary">
               สกุลเงิน: {currency} ({currentCurrencySymbol})
+            </span>
+            <span class="badge badge-secondary">
+              โหมด POS: {posLayout === "cart_first" ? "ตะกร้าหลัก" : "สินค้าหลัก"}
             </span>
             {#if allowOutOfStockSale}
               <span class="badge badge-accent">อนุญาตขายสินค้าหมด</span>
@@ -1783,6 +1801,108 @@
                       </p>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section: รูปแบบหน้าจอขายสินค้า POS (POS Layout Mode) -->
+            <div class="fluent-section-card">
+              <div class="section-card-header">
+                <div class="section-card-title-group">
+                  <h3>รูปแบบหน้าจอขายสินค้า (POS Layout)</h3>
+                  <p>
+                    เลือกการจัดวางหน้าจอขายหน้าร้านระหว่าง "สินค้าหลัก ตะกร้ารอง"
+                    หรือ "ตะกร้าหลัก สินค้ารอง" ให้เข้ากับสไตล์ของร้านคุณ
+                  </p>
+                </div>
+              </div>
+
+              <div class="fluent-rows-group">
+                <div class="layout-selection-grid">
+                  <!-- Option 1: products_first -->
+                  <button
+                    type="button"
+                    class="pos-layout-card"
+                    class:selected={posLayout === "products_first"}
+                    onclick={() => (posLayout = "products_first")}
+                  >
+                    <div class="pos-layout-card-preview products-first">
+                      <div class="preview-mock-products">
+                        <div class="mock-header-bar">
+                          <div class="mock-search-input"></div>
+                        </div>
+                        <div class="mock-product-grid">
+                          <div class="mock-card"></div>
+                          <div class="mock-card"></div>
+                          <div class="mock-card"></div>
+                          <div class="mock-card"></div>
+                          <div class="mock-card"></div>
+                          <div class="mock-card"></div>
+                        </div>
+                        <span class="mock-label">สินค้าหลัก (~65%)</span>
+                      </div>
+                      <div class="preview-mock-cart">
+                        <div class="mock-cart-header"></div>
+                        <div class="mock-cart-line"></div>
+                        <div class="mock-cart-line"></div>
+                        <div class="mock-cart-pay"></div>
+                        <span class="mock-label side">ตะกร้า</span>
+                      </div>
+                    </div>
+                    <div class="pos-layout-card-info">
+                      <div class="pos-layout-card-title">
+                        <span class="title-text">สินค้าหลัก ตะกร้ารอง</span>
+                        {#if posLayout === "products_first"}
+                          <span class="layout-active-badge">ใช้งานอยู่</span>
+                        {/if}
+                      </div>
+                      <p class="pos-layout-card-desc">
+                        ให้ความสำคัญกับแคตตาล็อกสินค้า เหมาะสำหรับคาเฟ่ เบเกอรี่
+                        ร้านอาหาร หรือร้านที่พนักงานเน้นจิ้มเลือกสินค้าบนหน้าจอ
+                      </p>
+                    </div>
+                  </button>
+
+                  <!-- Option 2: cart_first -->
+                  <button
+                    type="button"
+                    class="pos-layout-card"
+                    class:selected={posLayout === "cart_first"}
+                    onclick={() => (posLayout = "cart_first")}
+                  >
+                    <div class="pos-layout-card-preview cart-first">
+                      <div class="preview-mock-cart main">
+                        <div class="mock-cart-header"></div>
+                        <div class="mock-cart-row"></div>
+                        <div class="mock-cart-row"></div>
+                        <div class="mock-cart-row"></div>
+                        <div class="mock-cart-pay wide"></div>
+                        <span class="mock-label">ตะกร้าหลัก (~65%)</span>
+                      </div>
+                      <div class="preview-mock-products side">
+                        <div class="mock-header-bar compact">
+                          <div class="mock-search-input"></div>
+                        </div>
+                        <div class="mock-product-grid compact">
+                          <div class="mock-card"></div>
+                          <div class="mock-card"></div>
+                        </div>
+                        <span class="mock-label side">สินค้า</span>
+                      </div>
+                    </div>
+                    <div class="pos-layout-card-info">
+                      <div class="pos-layout-card-title">
+                        <span class="title-text">ตะกร้าหลัก สินค้ารอง</span>
+                        {#if posLayout === "cart_first"}
+                          <span class="layout-active-badge">ใช้งานอยู่</span>
+                        {/if}
+                      </div>
+                      <p class="pos-layout-card-desc">
+                        ให้ความสำคัญกับรายการบิลและตะกร้า เหมาะสำหรับมินิมาร์ท
+                        ซูเปอร์มาร์เก็ต หรือร้านที่เน้นสแกนเนอร์บาร์โค้ดรวดเร็ว
+                      </p>
+                    </div>
+                  </button>
                 </div>
               </div>
             </div>
@@ -2874,5 +2994,210 @@
       transform: scale(0.95);
       box-shadow: 0 0 0 0 rgba(163, 190, 140, 0);
     }
+  }
+
+  /* POS Layout Selection Cards */
+  .layout-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--space-md);
+    padding: var(--space-md);
+    width: 100%;
+  }
+
+  .pos-layout-card {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    background-color: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .pos-layout-card:hover {
+    border-color: rgba(94, 129, 172, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(94, 129, 172, 0.08);
+  }
+
+  .pos-layout-card.selected {
+    border-color: var(--color-primary);
+    background-color: rgba(94, 129, 172, 0.03);
+    box-shadow: 0 0 0 1px var(--color-primary), 0 4px 14px rgba(94, 129, 172, 0.12);
+  }
+
+  .pos-layout-card-preview {
+    display: flex;
+    gap: 8px;
+    height: 120px;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .preview-mock-products {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: #ffffff;
+    border: 1px dashed rgba(94, 129, 172, 0.4);
+    border-radius: 6px;
+    padding: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .preview-mock-products:not(.side) {
+    flex: 1.8;
+  }
+
+  .preview-mock-products.side {
+    flex: 1;
+  }
+
+  .preview-mock-cart {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: #ffffff;
+    border: 1px dashed rgba(163, 190, 140, 0.6);
+    border-radius: 6px;
+    padding: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .preview-mock-cart:not(.main) {
+    flex: 1;
+  }
+
+  .preview-mock-cart.main {
+    flex: 1.8;
+  }
+
+  .mock-header-bar {
+    height: 12px;
+    display: flex;
+    align-items: center;
+  }
+
+  .mock-search-input {
+    height: 10px;
+    width: 70%;
+    background: #e2e8f0;
+    border-radius: 3px;
+  }
+
+  .mock-product-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    flex: 1;
+  }
+
+  .mock-product-grid.compact {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mock-card {
+    background: rgba(94, 129, 172, 0.12);
+    border-radius: 3px;
+    height: 24px;
+  }
+
+  .mock-cart-header {
+    height: 8px;
+    width: 50%;
+    background: #cbd5e1;
+    border-radius: 2px;
+    margin-bottom: 2px;
+  }
+
+  .mock-cart-line {
+    height: 6px;
+    background: #f1f5f9;
+    border-radius: 2px;
+    border-left: 2px solid var(--color-primary);
+  }
+
+  .mock-cart-row {
+    height: 10px;
+    background: #f8fafc;
+    border-radius: 2px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .mock-cart-pay {
+    margin-top: auto;
+    height: 12px;
+    background: var(--color-accent-success);
+    opacity: 0.8;
+    border-radius: 3px;
+  }
+
+  .mock-cart-pay.wide {
+    height: 14px;
+  }
+
+  .mock-label {
+    position: absolute;
+    bottom: 3px;
+    right: 5px;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    opacity: 0.65;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 1px 4px;
+    border-radius: 3px;
+    line-height: 1;
+  }
+
+  .mock-label.side {
+    right: auto;
+    left: 4px;
+  }
+
+  .pos-layout-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .pos-layout-card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .title-text {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .layout-active-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-primary);
+    background-color: rgba(94, 129, 172, 0.12);
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+
+  .pos-layout-card-desc {
+    font-size: 12.5px;
+    color: var(--color-text-primary);
+    opacity: 0.7;
+    line-height: 1.45;
+    margin: 0;
   }
 </style>

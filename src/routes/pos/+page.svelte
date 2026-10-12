@@ -12,7 +12,13 @@
   import Pagination from "$lib/components/Pagination.svelte";
   import { parseAppError } from "$lib/utils/errorHandler";
   import { getCurrencySymbol } from "$lib/utils/currency";
-  import { currencyStore, fetchSystemCurrency } from "$lib/stores/settings";
+  import {
+    currencyStore,
+    fetchSystemCurrency,
+    posLayoutStore,
+    updatePosLayout,
+    type PosLayoutMode,
+  } from "$lib/stores/settings";
   import type {
     AppSettings,
     CartItem,
@@ -27,6 +33,7 @@
   let categories = $state<CategoryForPos[]>([]);
   let currency = $state("THB");
   let currencySymbol = $derived(getCurrencySymbol(currency));
+  let posLayout = $state<PosLayoutMode>("products_first");
   let lowStockThreshold = $state(10);
   let lowStockAlert = $state(true);
   let loading = $state(true);
@@ -142,6 +149,9 @@
     const unsub = currencyStore.subscribe((c) => {
       if (c) currency = c;
     });
+    const unsubLayout = posLayoutStore.subscribe((l) => {
+      if (l) posLayout = l;
+    });
 
     (async () => {
       await Promise.all([
@@ -181,6 +191,13 @@
             ? parsedThreshold
             : 10;
         lowStockAlert = settings.low_stock_alert !== "false";
+        if (settings.pos_layout === "cart_first") {
+          posLayout = "cart_first";
+          updatePosLayout("cart_first");
+        } else {
+          posLayout = "products_first";
+          updatePosLayout("products_first");
+        }
       } catch {
         printBehavior = "direct";
         receiptPreviewEnabled = false;
@@ -190,6 +207,7 @@
 
     return () => {
       unsub();
+      unsubLayout();
       if (toastTimeout) clearTimeout(toastTimeout);
     };
   });
@@ -513,8 +531,8 @@
   </div>
 </header>
 
-<div class="pos-layout">
-  <!-- ฝั่งซ้าย: สินค้า -->
+<div class="pos-layout" class:is-cart-first={posLayout === "cart_first"}>
+  <!-- สินค้า -->
   <section class="product-panel">
     <div class="search-row">
       <input
@@ -614,7 +632,11 @@
       {#if cart.length === 0}
         <div class="cart-empty">
           <p>ยังไม่มีสินค้าในตะกร้า</p>
-          <span>คลิกสินค้าฝั่งซ้าย หรือสแกนบาร์โค้ดเพื่อเพิ่มรายการ</span>
+          <span>
+            {posLayout === "cart_first"
+              ? "สแกนบาร์โค้ดเพื่อขาย หรือเลือกสินค้าจากฝั่งขวา"
+              : "คลิกสินค้าฝั่งซ้าย หรือสแกนบาร์โค้ดเพื่อเพิ่มรายการ"}
+          </span>
         </div>
       {:else}
         {#each cart as item, index (item.product_id)}
@@ -1205,25 +1227,32 @@
 
   .cart-item-right {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-    min-width: 72px;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
   }
 
   .cart-item-total {
     font-weight: 600;
     font-size: 14px;
+    white-space: nowrap;
+    text-align: right;
   }
 
   .remove-btn {
     color: var(--color-danger);
     opacity: 0.6;
-    padding: 2px;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
   }
 
   .remove-btn:hover {
     opacity: 1;
+    background-color: #fdecec;
   }
 
   .cart-summary {
@@ -1436,6 +1465,63 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  /* CART-FIRST MODE (ตรงข้ามกัน: ตะกร้าหลัก สินค้ารอง) */
+  .pos-layout.is-cart-first .cart-panel {
+    order: 1;
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .pos-layout.is-cart-first .product-panel {
+    order: 2;
+    width: 420px;
+    flex: none;
+    min-width: 0;
+  }
+
+  .pos-layout.is-cart-first .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+  }
+
+  .pos-layout.is-cart-first .search-row {
+    flex-wrap: wrap;
+  }
+
+  .pos-layout.is-cart-first .search-input {
+    min-width: 140px;
+  }
+
+  .pos-layout.is-cart-first .cart-header {
+    padding: var(--space-lg) var(--space-xl);
+    font-size: 16px;
+  }
+
+  .pos-layout.is-cart-first .cart-item {
+    padding: var(--space-md) var(--space-lg);
+    gap: var(--space-md);
+  }
+
+  .pos-layout.is-cart-first .cart-item-name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .pos-layout.is-cart-first .cart-item-price {
+    font-size: 13px;
+  }
+
+  .pos-layout.is-cart-first .cart-item-total {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  @media (max-width: 960px) {
+    .pos-layout.is-cart-first .product-panel {
+      width: 340px;
     }
   }
 </style>

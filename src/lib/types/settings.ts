@@ -23,6 +23,7 @@ export interface AppSettings {
   printer_codepage?: string;
   receipt_font?: string;
   receipt_footer?: string;
+  pos_layout?: "products_first" | "cart_first" | string;
 }
 
 /**
