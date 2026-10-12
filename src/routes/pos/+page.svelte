@@ -68,12 +68,20 @@
   let searchInput = $state<HTMLInputElement | null>(null);
 
   // Toast notification state
-  let toastMessage = $state<{ title: string; subtitle?: string } | null>(null);
+  let toastMessage = $state<{
+    title: string;
+    subtitle?: string;
+    type?: "success" | "error";
+  } | null>(null);
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function showToast(title: string, subtitle?: string) {
+  function showToast(
+    title: string,
+    subtitle?: string,
+    type: "success" | "error" = "success",
+  ) {
     if (toastTimeout) clearTimeout(toastTimeout);
-    toastMessage = { title, subtitle };
+    toastMessage = { title, subtitle, type };
     toastTimeout = setTimeout(() => {
       toastMessage = null;
     }, 2500);
@@ -249,6 +257,41 @@
     item.quantity = next;
   }
 
+  function handleQtyInput(index: number, valStr: string) {
+    const item = cart[index];
+    if (!item) return;
+    const trimmed = valStr.trim();
+    if (trimmed === "") return;
+
+    const parsed = parseInt(trimmed, 10);
+    if (isNaN(parsed) || parsed <= 0) return;
+
+    if (!allowOutOfStockSale && parsed > item.stock) {
+      item.quantity = Math.max(1, item.stock);
+      showToast(
+        "สต็อกไม่เพียงพอ",
+        `สินค้า "${item.product_name}" มีสต็อกคงเหลือ ${item.stock} ชิ้น`,
+        "error",
+      );
+    } else {
+      item.quantity = parsed;
+    }
+  }
+
+  function handleQtyBlur(index: number, inputEl: HTMLInputElement) {
+    const item = cart[index];
+    if (!item) return;
+    const parsed = parseInt(inputEl.value.trim(), 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      item.quantity = 1;
+    } else if (!allowOutOfStockSale && parsed > item.stock) {
+      item.quantity = Math.max(1, item.stock);
+    } else {
+      item.quantity = parsed;
+    }
+    inputEl.value = String(item.quantity);
+  }
+
   function removeItem(index: number) {
     cart.splice(index, 1);
   }
@@ -377,7 +420,7 @@
     if (!term) return;
 
     // 1. ตรวจสอบในรายการสินค้าที่โหลดอยู่ในหน้าปัจจุบันก่อน
-    let product = products.find(
+    let product: ProductForPos | undefined = products.find(
       (p) => (p.barcode ?? "").toLowerCase() === term.toLowerCase(),
     );
 
@@ -385,29 +428,40 @@
     if (!product) {
       try {
         const data = (await invoke("get_products_data", {
-          params: { page: 1, pageSize: 1, search: term },
+          params: { page: 1, pageSize: 10, search: term },
         })) as ProductsPageData;
         if (data.products && data.products.length > 0) {
-          product = data.products[0];
+          const exactBarcodeMatch = data.products.find(
+            (p) => (p.barcode ?? "").toLowerCase() === term.toLowerCase(),
+          );
+          product = exactBarcodeMatch ?? data.products[0];
         }
       } catch (err) {
         console.error("Barcode lookup error:", err);
       }
     }
 
-    // 3. หากยังไม่พบคงเหลือ ให้เลือกรายการแรกที่มีในหน้าปัจจุบัน
-    if (!product && products.length > 0) {
-      product = products[0];
-    }
-
     if (product) {
-      addToCart(product);
+      if (!allowOutOfStockSale && product.current_stock <= 0) {
+        showToast("สินค้าหมด", `สินค้า "${product.name}" หมดสต็อก`, "error");
+      } else {
+        addToCart(product);
+      }
       search = "";
       if (currentPage !== 1) {
         currentPage = 1;
       } else {
         loadProducts();
       }
+    } else {
+      showToast("ไม่พบสินค้า", `ไม่พบสินค้าสำหรับ "${term}"`, "error");
+      search = "";
+      if (currentPage !== 1) {
+        currentPage = 1;
+      } else {
+        loadProducts();
+      }
+      searchInput?.focus();
     }
   }
 </script>
@@ -577,7 +631,24 @@
                 class="qty-btn"
                 onclick={() => changeQty(index, -1)}>−</button
               >
-              <span class="qty-display">{item.quantity}</span>
+              <input
+                type="number"
+                class="qty-input"
+                min="1"
+                max={!allowOutOfStockSale ? item.stock : undefined}
+                value={item.quantity}
+                onfocus={(e) => (e.target as HTMLInputElement).select()}
+                oninput={(e) =>
+                  handleQtyInput(index, (e.target as HTMLInputElement).value)}
+                onblur={(e) =>
+                  handleQtyBlur(index, e.target as HTMLInputElement)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+              />
               <button
                 type="button"
                 class="qty-btn"
@@ -758,21 +829,43 @@
 
 <!-- Toast Notification -->
 {#if toastMessage}
-  <aside class="pos-toast" role="status" aria-live="polite">
+  <aside
+    class="pos-toast"
+    class:toast-error={toastMessage.type === "error"}
+    role="status"
+    aria-live="polite"
+  >
     <div class="toast-icon">
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </svg>
+      {#if toastMessage.type === "error"}
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      {:else}
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      {/if}
     </div>
     <div class="toast-content">
       <div class="toast-title">{toastMessage.title}</div>
@@ -1072,10 +1165,42 @@
     cursor: not-allowed;
   }
 
-  .qty-display {
-    min-width: 28px;
+  .qty-input {
+    width: 42px;
+    height: 28px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
     text-align: center;
     font-weight: 600;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--color-text-primary);
+    padding: 0 2px;
+    transition: all 0.15s ease;
+  }
+
+  .qty-input:hover {
+    border-color: var(--color-muted);
+    background-color: var(--color-background);
+  }
+
+  .qty-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background-color: var(--color-surface);
+    box-shadow: 0 0 0 2px rgba(94, 129, 172, 0.2);
+  }
+
+  .qty-input::-webkit-inner-spin-button,
+  .qty-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .qty-input {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   .cart-item-right {
@@ -1251,6 +1376,15 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+  }
+
+  .pos-toast.toast-error {
+    border-left-color: var(--color-danger);
+  }
+
+  .pos-toast.toast-error .toast-icon {
+    background-color: rgba(191, 97, 106, 0.15);
+    color: var(--color-danger);
   }
 
   .toast-content {
