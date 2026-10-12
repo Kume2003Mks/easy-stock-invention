@@ -99,8 +99,7 @@ pub fn get_products_paginated(
             p.cost_price, 
             p.selling_price, 
             p.wholesale_price, 
-            p.current_stock, 
-            p.reorder_level 
+            p.current_stock
          FROM Products p 
          LEFT JOIN Categories c ON p.category_id = c.category_id 
          LEFT JOIN Suppliers s ON p.supplier_id = s.supplier_id 
@@ -129,7 +128,6 @@ pub fn get_products_paginated(
                 selling_price: row.get(6)?,
                 wholesale_price: row.get(7)?,
                 current_stock: row.get(8)?,
-                reorder_level: row.get(9)?,
             })
         },
     )?;
@@ -147,7 +145,7 @@ pub fn get_products_paginated(
 
 pub fn get_all_products(conn: &Connection) -> Result<Vec<Product>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT product_id, barcode, name, category_id, supplier_id, cost_price, selling_price, wholesale_price, current_stock, reorder_level 
+        "SELECT product_id, barcode, name, category_id, supplier_id, cost_price, selling_price, wholesale_price, current_stock 
          FROM Products ORDER BY product_id ASC",
     )?;
 
@@ -162,7 +160,6 @@ pub fn get_all_products(conn: &Connection) -> Result<Vec<Product>, AppError> {
             selling_price: row.get(6)?,
             wholesale_price: row.get(7)?,
             current_stock: row.get(8)?,
-            reorder_level: row.get(9)?,
         })
     })?;
 
@@ -197,9 +194,16 @@ pub fn get_all_suppliers(conn: &Connection) -> Result<Vec<Supplier>, AppError> {
 }
 
 pub fn insert_product(conn: &Connection, product: &Product) -> Result<(), AppError> {
+    if product.current_stock < 0 {
+        return Err(AppError::Validation("จำนวนสต็อกต้องไม่ติดลบ".into()));
+    }
+    if product.cost_price < 0.0 || product.selling_price < 0.0 || product.wholesale_price < 0.0 {
+        return Err(AppError::Validation("ราคาต้องไม่ติดลบ".into()));
+    }
+
     conn.execute(
-        "INSERT INTO Products (product_id, barcode, name, category_id, supplier_id, cost_price, selling_price, wholesale_price, current_stock, reorder_level)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO Products (product_id, barcode, name, category_id, supplier_id, cost_price, selling_price, wholesale_price, current_stock)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         rusqlite::params![
             product.product_id,
             product.barcode,
@@ -210,19 +214,21 @@ pub fn insert_product(conn: &Connection, product: &Product) -> Result<(), AppErr
             product.selling_price,
             product.wholesale_price,
             product.current_stock,
-            product.reorder_level,
         ],
     )?;
     Ok(())
 }
 
 pub fn update_product(conn: &Connection, product: &Product) -> Result<(), AppError> {
+    if product.cost_price < 0.0 || product.selling_price < 0.0 || product.wholesale_price < 0.0 {
+        return Err(AppError::Validation("ราคาต้องไม่ติดลบ".into()));
+    }
+
     conn.execute(
         "UPDATE Products 
          SET barcode = ?1, name = ?2, category_id = ?3, supplier_id = ?4,
-             cost_price = ?5, selling_price = ?6, wholesale_price = ?7,
-             reorder_level = ?8
-         WHERE product_id = ?9",
+             cost_price = ?5, selling_price = ?6, wholesale_price = ?7
+         WHERE product_id = ?8",
         rusqlite::params![
             product.barcode,
             product.name,
@@ -231,7 +237,6 @@ pub fn update_product(conn: &Connection, product: &Product) -> Result<(), AppErr
             product.cost_price,
             product.selling_price,
             product.wholesale_price,
-            product.reorder_level,
             product.product_id,
         ],
     )?;
@@ -246,7 +251,7 @@ pub fn adjust_stock(
     reference_no: Option<&str>,
 ) -> Result<Product, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT product_id, barcode, name, category_id, supplier_id, cost_price, selling_price, wholesale_price, current_stock, reorder_level 
+        "SELECT product_id, barcode, name, category_id, supplier_id, cost_price, selling_price, wholesale_price, current_stock 
          FROM Products WHERE product_id = ?1",
     )?;
 
@@ -261,7 +266,6 @@ pub fn adjust_stock(
             selling_price: row.get(6)?,
             wholesale_price: row.get(7)?,
             current_stock: row.get(8)?,
-            reorder_level: row.get(9)?,
         })
     })?;
 
@@ -356,7 +360,6 @@ mod tests {
                 selling_price REAL NOT NULL DEFAULT 0.0,        
                 wholesale_price REAL NOT NULL DEFAULT 0.0,     
                 current_stock INTEGER NOT NULL DEFAULT 0,
-                reorder_level INTEGER NOT NULL DEFAULT 10,
                 FOREIGN KEY (category_id) REFERENCES Categories(category_id) ON UPDATE CASCADE ON DELETE SET NULL,
                 FOREIGN KEY (supplier_id) REFERENCES Suppliers(supplier_id) ON UPDATE CASCADE ON DELETE SET NULL
             );
@@ -412,7 +415,6 @@ mod tests {
                 selling_price: 20.0,
                 wholesale_price: 15.0,
                 current_stock: 50,
-                reorder_level: 10,
             };
             insert_product(&conn, &p).unwrap();
         }
@@ -487,5 +489,48 @@ mod tests {
         )
         .unwrap();
         assert_eq!(res.total_items, 10);
+    }
+
+    #[test]
+    fn test_negative_values_validation() {
+        let conn = setup_test_db();
+
+        // 1. Negative stock should fail
+        let mut p = Product {
+            product_id: "neg-stock".into(),
+            barcode: Some("999001".into()),
+            name: "สินค้าสต็อกติดลบ".into(),
+            category_id: None,
+            supplier_id: None,
+            cost_price: 10.0,
+            selling_price: 20.0,
+            wholesale_price: 15.0,
+            current_stock: -5,
+        };
+        let err = insert_product(&conn, &p).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert_eq!(msg, "จำนวนสต็อกต้องไม่ติดลบ"),
+            _ => panic!("Expected validation error, got {:?}", err),
+        }
+
+        // 2. Negative cost price should fail
+        p.current_stock = 10;
+        p.cost_price = -1.0;
+        let err = insert_product(&conn, &p).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert_eq!(msg, "ราคาต้องไม่ติดลบ"),
+            _ => panic!("Expected validation error, got {:?}", err),
+        }
+
+        // 3. Negative selling price on update should fail
+        p.cost_price = 10.0;
+        insert_product(&conn, &p).unwrap();
+
+        p.selling_price = -5.0;
+        let err = update_product(&conn, &p).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert_eq!(msg, "ราคาต้องไม่ติดลบ"),
+            _ => panic!("Expected validation error, got {:?}", err),
+        }
     }
 }

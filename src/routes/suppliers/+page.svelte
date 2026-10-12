@@ -7,12 +7,7 @@
   import Pagination from '$lib/components/Pagination.svelte';
   import ErrorModal from '$lib/components/ErrorModal.svelte';
   import { parseAppError } from '$lib/utils/errorHandler';
-
-  interface Supplier {
-    supplier_id: string;
-    name: string;
-    contact_info: string | null;
-  }
+  import type { Supplier } from '$lib/types';
 
   let suppliers = $state<Supplier[]>([]);
   let loading = $state(true);

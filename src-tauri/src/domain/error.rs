@@ -13,6 +13,9 @@ pub enum AppError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Printer error: {0}")]
+    Printer(String),
 }
 
 // Implement Serialize so errors can be sent back to Tauri frontend

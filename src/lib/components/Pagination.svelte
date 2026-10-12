@@ -2,6 +2,7 @@
   import Dropdown from './Dropdown.svelte';
 
   let {
+    id = 'pagination',
     currentPage = $bindable(1),
     pageSize = $bindable(10),
     totalItems = 0,
@@ -9,6 +10,7 @@
     itemLabel = 'รายการ',
     showPageSize = true,
   }: {
+    id?: string;
     currentPage?: number;
     pageSize?: number;
     totalItems: number;
@@ -125,7 +127,7 @@
   {#if showPageSize}
     <div class="pagination-size">
       <Dropdown
-        id="page-size"
+        id="{id}-page-size"
         label="รายการต่อหน้า:"
         options={pageSizeOptions.map((size) => ({
           value: String(size),
