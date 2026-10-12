@@ -549,7 +549,7 @@
         }}
         type="text"
         class="input-field search-input"
-        placeholder="สแกนบาร์โค้ด / ค้นหาสินค้า (F2)"
+        placeholder="สแกน / ค้นหา (F2)"
       />
       <Dropdown
         id="pos-category-filter"
@@ -1493,6 +1493,7 @@
 
   .pos-layout.is-cart-first .search-input {
     min-width: 140px;
+    font-size: 14px;
   }
 
   .pos-layout.is-cart-first .cart-header {
