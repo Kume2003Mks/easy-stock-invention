@@ -160,6 +160,12 @@
     }
   }
 
+  function handlePrintBehaviorChange(val: "direct" | "preview" | "none") {
+    printBehavior = val;
+    autoPrintEnabled = val === "direct";
+    receiptPreviewEnabled = val === "preview";
+  }
+
   function handleConnectionChange(val: string | number) {
     printerConnection = String(val);
     if (printerConnection === "none") {
@@ -304,8 +310,6 @@
     if (cat === "printer") {
       return (
         printBehavior !== savedSnapshot.printBehavior ||
-        autoPrintEnabled !== savedSnapshot.autoPrintEnabled ||
-        receiptPreviewEnabled !== savedSnapshot.receiptPreviewEnabled ||
         paperSize !== savedSnapshot.paperSize ||
         printerConnection !== savedSnapshot.printerConnection ||
         printerTarget !== savedSnapshot.printerTarget ||
@@ -446,9 +450,10 @@
     }
 
     try {
-      loadSystemPrinters();
-
-      const result = (await invoke("get_settings")) as AppSettings;
+      const [, result] = await Promise.all([
+        loadSystemPrinters(),
+        invoke("get_settings") as Promise<AppSettings>,
+      ]);
 
       storeName = result.store_name || "Easy Stock";
       storeAddress = result.store_address || "";
@@ -536,6 +541,17 @@
           : printerConnection === "network"
             ? printerTarget
             : "";
+
+      if (cat === "printer") {
+        if (printerConnection === "usb" && !isManualUsb) {
+          printerTarget = selectedUsbPrinter;
+        } else if (printerConnection === "none") {
+          printerTarget = "";
+        }
+        autoPrintEnabled =
+          printerConnection !== "none" && printBehavior === "direct";
+        receiptPreviewEnabled = printBehavior === "preview";
+      }
 
       await invoke("save_settings", {
         payload: {
@@ -1200,7 +1216,7 @@
                       value="direct"
                       checked={printBehavior === "direct"}
                       disabled={printerConnection === "none"}
-                      onchange={() => (printBehavior = "direct")}
+                      onchange={() => handlePrintBehaviorChange("direct")}
                     />
                     <div class="radio-indicator"></div>
                   </div>
@@ -1236,7 +1252,7 @@
                       name="print-behavior"
                       value="preview"
                       checked={printBehavior === "preview"}
-                      onchange={() => (printBehavior = "preview")}
+                      onchange={() => handlePrintBehaviorChange("preview")}
                     />
                     <div class="radio-indicator"></div>
                   </div>
@@ -1264,7 +1280,7 @@
                       name="print-behavior"
                       value="none"
                       checked={printBehavior === "none"}
-                      onchange={() => (printBehavior = "none")}
+                      onchange={() => handlePrintBehaviorChange("none")}
                     />
                     <div class="radio-indicator"></div>
                   </div>
